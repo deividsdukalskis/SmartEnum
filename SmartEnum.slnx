@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="SmartEnum/SmartEnum.csproj" />
+  <Project Path="TestProject/TestProject.csproj" Id="0e21886f-68cb-4772-907d-15800552c6fd" />
+</Solution>

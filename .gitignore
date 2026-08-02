@@ -1,0 +1,8 @@
+.vs/
+.vscode/
+obj/
+bin/
+*.map
+*.user
+node_modules/
+wwwroot/
