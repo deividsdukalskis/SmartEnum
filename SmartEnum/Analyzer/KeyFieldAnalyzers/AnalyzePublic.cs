@@ -7,31 +7,22 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
+using SmartEnum.Shared;
 
-public static partial class SubclassFieldAnalyzerExtensions
+public static partial class KeyFieldAnalyzerFunctions
 {
-	public static
-		(SymbolAnalysisContext Context,
-		IFieldSymbol FieldInfo,
-		ITypeSymbol IntendedFieldType,
-		string IntendedFieldName)?
-			EnforcePublic(this (SymbolAnalysisContext Context, IFieldSymbol FieldInfo, ITypeSymbol IntendedFieldType, string IntendedFieldName)? data, DiagnosticDescriptor error)
+	public static void AnalyzePublic(ValidationResult.KeyFieldValidationResult keyFieldResult, SymbolAnalysisContext context, DiagnosticDescriptor error)
 	{
-		if (!data.HasValue)
-		{
-			return null;
-		}
-
 		Func<Location> getFieldAccessibilityModifierLocation = () =>
 		{
-			SyntaxNode? syntax = data.Value.FieldInfo.DeclaringSyntaxReferences
+			SyntaxNode? syntax = keyFieldResult.FieldInfo?.DeclaringSyntaxReferences
 				.FirstOrDefault()?
-				.GetSyntax(data.Value.Context.CancellationToken);
+				.GetSyntax(context.CancellationToken);
 
 			if (syntax is not VariableDeclaratorSyntax variable ||
 				variable.Parent?.Parent is not FieldDeclarationSyntax declaration)
 			{
-				return data.Value.FieldInfo.Locations.FirstOrDefault() ?? Location.None;
+				return keyFieldResult.FieldInfo?.Locations.FirstOrDefault() ?? Location.None;
 			}
 
 			SyntaxToken[] accessibilityModifiers = declaration.Modifiers
@@ -59,11 +50,9 @@ public static partial class SubclassFieldAnalyzerExtensions
 				span);
 		};
 
-		if (data.Value.FieldInfo.DeclaredAccessibility != Accessibility.Public)
+		if (keyFieldResult.PublicCheckStatus is ValidationStatus.Invalid)
 		{
-			data.Value.Context.ReportDiagnostic(Diagnostic.Create(error, getFieldAccessibilityModifierLocation()));
+			context.ReportDiagnostic(Diagnostic.Create(error, getFieldAccessibilityModifierLocation()));
 		}
-
-		return data;
 	}
 }

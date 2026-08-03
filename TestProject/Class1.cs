@@ -2,23 +2,25 @@
 
 using SmartEnum;
 
+//[SmartEnum<string>("StatusSubtypeId")]
+//[SmartEnum<string>("StatusSubtypeIds")]
 public class EventState
 {
 }
 
-public class Scheduled1 : EventState
+[SmartEnum<string>("StatusSubtypeId")]
+[SmartEnum<string>("StatusSubtypeIds")]
+public abstract partial class Scheduled1 : EventState
 {
 	public const int StatusId = 1;
 }
 
-[SmartEnum<string>("StatusSubtype Id")]
-[SmartEnum<string>("StatusSu btypeIds")]
-public class Scheduled2 : Scheduled1
+public abstract class Scheduled2 : Scheduled1
 {
-	public const int StatusId = 1;
+	public const int StatusSubtypeId = 1;
 }
 
-public class Scheduled3 : Scheduled2
+public partial class Scheduled3 : Scheduled2
 {
-	public const int StatusId = 1;
+	public const string StatusSubtypeIds = "";
 }
