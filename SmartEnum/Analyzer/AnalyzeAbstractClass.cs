@@ -7,13 +7,13 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeAbstractClass(ValidationResult validationResult, SymbolAnalysisContext context)
+	private void AnalyzeAbstractClass(HierarchyError error, CompilationAnalysisContext context)
 	{
-		if (validationResult.AbstractClassCheckStatus is ValidationStatus.Invalid)
+		if (error is HierarchyError.ClassNotAbstract abstractError)
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
 				MustBeAbstractClass,
-				validationResult.OriginalClass.Locations.FirstOrDefault()));
+				abstractError.Type.Locations.FirstOrDefault()));
 		}
 	}
 }

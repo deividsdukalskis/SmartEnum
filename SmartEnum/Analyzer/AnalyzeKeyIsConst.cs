@@ -7,13 +7,13 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzePartialClass(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyIsConst(HierarchyError error, CompilationAnalysisContext context)
 	{
-		if (error is HierarchyError.ClassNotPartial partialError)
+		if (error is HierarchyError.KeyFieldNotConst notConstError)
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
-				MustBePartialClass,
-				partialError.Type.Locations.FirstOrDefault()));
+				KeyIsNotConst,
+				notConstError.Field.Locations.FirstOrDefault()));
 		}
 	}
 }

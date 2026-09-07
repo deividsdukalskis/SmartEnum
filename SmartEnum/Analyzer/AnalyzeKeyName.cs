@@ -9,8 +9,13 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyName(ValidationResult validationResult, SymbolAnalysisContext context)
+	private void AnalyzeKeyName(HierarchyError error, CompilationAnalysisContext context)
 	{
+		if (error is not HierarchyError.InvalidKeyName invalidKeyError)
+		{
+			return;
+		}
+
 		Func<AttributeData, Location> getAttribLocation = (attrib) =>
 		{
 			SyntaxNode? syntax = attrib.ApplicationSyntaxReference?.GetSyntax(context.CancellationToken);
@@ -22,12 +27,12 @@ public sealed partial class SmartEnumAnalyzer
 			return Location.None;
 		};
 
-		foreach (AttributeData attrib in validationResult.AttributesWithInvalidKeyName)
+		foreach ((AttributeData attrib, string name) in invalidKeyError.AttributesWithInvalidKeyNames)
 		{
 			context.ReportDiagnostic(Diagnostic.Create(
 				InvalidKeyName,
 				getAttribLocation(attrib),
-				attrib.ConstructorArguments.FirstOrDefault().Value));
+				name));
 		}
 	}
 }

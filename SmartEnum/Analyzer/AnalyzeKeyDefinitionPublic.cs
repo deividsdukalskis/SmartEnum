@@ -9,20 +9,25 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Text;
 using SmartEnum.Shared;
 
-public static partial class KeyFieldAnalyzerFunctions
+public sealed partial class SmartEnumAnalyzer
 {
-	public static void AnalyzePublic(ValidationResult.KeyFieldValidationResult keyFieldResult, SymbolAnalysisContext context, DiagnosticDescriptor error)
+	private void AnalyzeKeyDefinitionPublic(HierarchyError error, CompilationAnalysisContext context)
 	{
+		if (error is not HierarchyError.KeyFieldNotPublic notPublicError)
+		{
+			return;
+		}
+
 		Func<Location> getFieldAccessibilityModifierLocation = () =>
 		{
-			SyntaxNode? syntax = keyFieldResult.FieldInfo?.DeclaringSyntaxReferences
+			SyntaxNode? syntax = notPublicError.Field.DeclaringSyntaxReferences
 				.FirstOrDefault()?
 				.GetSyntax(context.CancellationToken);
 
 			if (syntax is not VariableDeclaratorSyntax variable ||
 				variable.Parent?.Parent is not FieldDeclarationSyntax declaration)
 			{
-				return keyFieldResult.FieldInfo?.Locations.FirstOrDefault() ?? Location.None;
+				return notPublicError.Field.Locations.FirstOrDefault() ?? Location.None;
 			}
 
 			SyntaxToken[] accessibilityModifiers = declaration.Modifiers
@@ -50,9 +55,6 @@ public static partial class KeyFieldAnalyzerFunctions
 				span);
 		};
 
-		if (keyFieldResult.PublicCheckStatus is ValidationStatus.Invalid)
-		{
-			context.ReportDiagnostic(Diagnostic.Create(error, getFieldAccessibilityModifierLocation()));
-		}
+		context.ReportDiagnostic(Diagnostic.Create(KeyIsNotPublic, getFieldAccessibilityModifierLocation()));
 	}
 }

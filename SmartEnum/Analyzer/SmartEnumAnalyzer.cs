@@ -1,8 +1,10 @@
 ﻿namespace SmartEnum.Analyzer;
 
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Diagnostics;
 using SmartEnum.Shared;
+using System.Linq;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed partial class SmartEnumAnalyzer : DiagnosticAnalyzer
@@ -28,19 +30,34 @@ public sealed partial class SmartEnumAnalyzer : DiagnosticAnalyzer
 			compilationContext.RegisterSymbolAction((context) =>
 			{
 				INamedTypeSymbol type = (INamedTypeSymbol)context.Symbol;
-				ValidationResult result = SharedFunctions.Validate(type, attributeDefinition);
-				if (!result.IsInEnumHierarchy)
-				{
-					return;
-				}
-
-				this.AnalyzeDuplicateAttributes(result, context);
-				this.AnalyzeAbstractClass(result, context);
-				this.AnalyzePartialClass(result, context);
-				this.AnalyzeKeyName(result, context);
-				this.AnalyzeKeyField(result, context);
+				EnumHierarchy.CollectHierarchyData(type, attributeDefinition);
 			},
 			SymbolKind.NamedType);
+
+			compilationContext.RegisterCompilationEndAction((context) =>
+			{
+				foreach (Result<HierarchyData, HierarchyError.DuplicateAttributesFound> hierarchyData in EnumHierarchy.HierarchyDatas)
+				{
+					Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> validationResult = EnumHierarchy.ValidateHierarchyData(hierarchyData);
+					if (validationResult is Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>> failure)
+					{
+						foreach (HierarchyError error in failure.Error)
+						{
+							this.AnalyzeDuplicateAttributes(error, context);
+							this.AnalyzeDuplicateKeyNames(error, context);
+							this.AnalyzeDuplicateProperties(error, context);
+							this.AnalyzeAbstractClass(error, context);
+							this.AnalyzeNonAbstractClass(error, context);
+							this.AnalyzePartialClass(error, context);
+							this.AnalyzeKeyName(error, context);
+							this.AnalyzeKeyDefinitionExists(error, context);
+							this.AnalyzeKeyDefinitionPublic(error, context);
+							this.AnalyzeKeyIsConst(error, context);
+							this.AnalyzeKeyFieldType(error, context);
+						}
+					}
+				}
+			});
 		});
 	}
 }
