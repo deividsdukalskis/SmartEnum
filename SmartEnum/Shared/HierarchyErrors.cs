@@ -1,7 +1,6 @@
 ﻿namespace SmartEnum.Shared;
 
 using System.Collections.Immutable;
-using System.Linq;
 using Microsoft.CodeAnalysis;
 
 public abstract class HierarchyError
@@ -20,9 +19,23 @@ public abstract class HierarchyError
 
 	public class DuplicatePropertyDefinitionsFound : HierarchyError
 	{
-		public ImmutableArray<IGrouping<(string CommonParentTypeName, IPropertySymbol CurrentTypeProperty), string>> PropertiesWithSameName { get; }
+		public class DuplicateProperties
+		{
+			public IPropertySymbol Property { get; }
+			public string CommonTypeName { get; }
+			public ImmutableArray<string> OtherTypeNamesWithDuplicatePropertyNames { get; }
 
-		public DuplicatePropertyDefinitionsFound(ImmutableArray<IGrouping<(string CommonParentTypeName, IPropertySymbol CurrentTypeProperty), string>> propertiesWithSameName) => this.PropertiesWithSameName = propertiesWithSameName;
+			public DuplicateProperties(IPropertySymbol property, string commonTypeName, ImmutableArray<string> otherTypeNamesWithDuplicatePropertyNames)
+			{
+				this.Property = property;
+				this.CommonTypeName = commonTypeName;
+				this.OtherTypeNamesWithDuplicatePropertyNames = otherTypeNamesWithDuplicatePropertyNames;
+			}
+		}
+
+		public ImmutableArray<DuplicateProperties> PropertiesWithDuplicateName { get; }
+
+		public DuplicatePropertyDefinitionsFound(ImmutableArray<DuplicateProperties> propertiesWithDuplicateName) => this.PropertiesWithDuplicateName = propertiesWithDuplicateName;
 	}
 
 	public class InvalidKeyName : HierarchyError
@@ -123,4 +136,8 @@ public abstract class HierarchyError
 			this.DuplicateKeyNames = duplicateKeyNames;
 		}
 	}
+
+	public class NotInEnumHierarchy : HierarchyError { }
+
+	public class RelevantAttributeNotFound : HierarchyError { }
 }

@@ -2,7 +2,7 @@ namespace SmartEnum.Shared;
 
 using Microsoft.CodeAnalysis;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<HierarchyError.KeyFieldInvalidType> EnforceKeyFieldType(HierarchyData.DerivedTypeData data, (IFieldSymbol Field, ITypeSymbol IntendedType) tuple)
 	{

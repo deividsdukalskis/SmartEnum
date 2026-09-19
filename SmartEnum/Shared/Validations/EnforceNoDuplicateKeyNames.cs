@@ -1,11 +1,10 @@
 namespace SmartEnum.Shared;
 
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<HierarchyError.DuplicateKeyNamesFound> EnforceNoDuplicateKeyNames(HierarchyData data)
 	{
@@ -14,17 +13,18 @@ public static partial class EnumHierarchy
 			return new Success<HierarchyError.DuplicateKeyNamesFound>();
 		}
 
-		IEnumerable<object?> duplicateValues = baseType.EnumAttributes
+		ImmutableArray<object?> duplicateValues = baseType.EnumAttributes
 			.GroupBy(x => x.ConstructorArguments.FirstOrDefault().Value)
 			.Where(group => group.Count() > 1)
-			.Select(group => group.Key);
+			.Select(group => group.Key)
+			.ToImmutableArray();
 
 		if (!duplicateValues.Any())
 		{
 			return new Success<HierarchyError.DuplicateKeyNamesFound>();
 		}
 
-		List<string> duplicateNames = new();
+		ImmutableArray<string>.Builder duplicateNames = ImmutableArray.CreateBuilder<string>();
 		foreach (object? item in duplicateValues)
 		{
 			if (item is not string s)
@@ -35,6 +35,6 @@ public static partial class EnumHierarchy
 			duplicateNames.Add(s);
 		}
 
-		return new Failure<HierarchyError.DuplicateKeyNamesFound>(new(data.Type, duplicateNames.ToImmutableArray()));
+		return new Failure<HierarchyError.DuplicateKeyNamesFound>(new(data.Type, duplicateNames.ToImmutable()));
 	}
 }

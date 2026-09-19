@@ -3,7 +3,7 @@ namespace SmartEnum.Shared;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<(IFieldSymbol Field, ITypeSymbol IntendedType), HierarchyError.KeyFieldNotDefined> EnforceKeyFieldDefined(HierarchyData.DerivedTypeData data)
 	{

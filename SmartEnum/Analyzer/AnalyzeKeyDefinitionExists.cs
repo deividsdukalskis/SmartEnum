@@ -7,7 +7,7 @@ using SmartEnum.Shared;
 
 public partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyDefinitionExists(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyDefinitionExists(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is HierarchyError.KeyFieldNotDefined notDefinedError)
 		{

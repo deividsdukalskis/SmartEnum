@@ -9,7 +9,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyName(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyName(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is not HierarchyError.InvalidKeyName invalidKeyError)
 		{

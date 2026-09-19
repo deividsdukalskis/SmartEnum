@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis;
 using System.Linq;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<HierarchyError.ClassNotPartial> EnforcePartialClass(HierarchyData data)
 	{

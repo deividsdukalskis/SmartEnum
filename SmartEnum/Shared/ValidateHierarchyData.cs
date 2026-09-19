@@ -1,38 +1,70 @@
 namespace SmartEnum.Shared;
 
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
-	public static Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> ValidateHierarchyData(Result<HierarchyData, HierarchyError.DuplicateAttributesFound> data)
+	public INamedTypeSymbol Type { get; }
+
+	protected ValidatedHierarchyData(INamedTypeSymbol type) => this.Type = type;
+
+	public class BaseTypeData : ValidatedHierarchyData
+	{
+		public BaseTypeData(INamedTypeSymbol type) : base(type) { }
+	}
+
+	public class DerivedConcreteTypeData : ValidatedHierarchyData
+	{
+		public INamedTypeSymbol BaseType { get; }
+		public IFieldSymbol KeyField { get; }
+
+		public DerivedConcreteTypeData(INamedTypeSymbol type, INamedTypeSymbol baseType, IFieldSymbol keyField) : base(type)
+		{
+			this.BaseType = baseType;
+			this.KeyField = keyField;
+		}
+	}
+
+	public class DerivedAbstractTypeData : ValidatedHierarchyData
+	{
+		public INamedTypeSymbol BaseType { get; }
+		public IFieldSymbol KeyField { get; }
+
+		public DerivedAbstractTypeData(INamedTypeSymbol type, INamedTypeSymbol baseType, IFieldSymbol keyField) : base(type)
+		{
+			this.BaseType = baseType;
+			this.KeyField = keyField;
+		}
+	}
+
+	public static Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> Validate(Result<HierarchyData, HierarchyError> data, Lazy<ImmutableArray<DuplicatePropertyData>> duplicateProperties)
 	{
 		return data switch
 		{
-			Failure<HierarchyData, HierarchyError.DuplicateAttributesFound> failure => new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(ImmutableArray.Create<HierarchyError>(failure.Error)),
-			Success<HierarchyData, HierarchyError.DuplicateAttributesFound> success => HandleSuccess(success),
+			Failure<HierarchyData, HierarchyError> failure => new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(ImmutableArray.Create(failure.Error)),
+			Success<HierarchyData, HierarchyError> success => HandleSuccess(success),
 			_ => throw new NotImplementedException()
 		};
 
-		Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> HandleSuccess(Success<HierarchyData, HierarchyError.DuplicateAttributesFound> data)
+		Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> HandleSuccess(Success<HierarchyData, HierarchyError> data)
 		{
-			List<HierarchyError> errors = new();
+			ImmutableArray<HierarchyError>.Builder errors = ImmutableArray.CreateBuilder<HierarchyError>();
 			Result<HierarchyError.DuplicateKeyNamesFound> duplicateKeyCheck = EnforceNoDuplicateKeyNames(data.Value);
 			Result<HierarchyError.InvalidKeyName> keyNameCheck = EnforceProperKeyName(data.Value);
 			if (duplicateKeyCheck is Failure<HierarchyError.DuplicateKeyNamesFound> failure1) errors.Add(failure1.Error);
 			if (keyNameCheck is Failure<HierarchyError.InvalidKeyName> failure2) errors.Add(failure2.Error);
 			if (errors.Any())
 			{
-				return new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutableArray());
+				return new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutable());
 			}
 
 			Result<HierarchyError.ClassNotAbstract> abstractCheck = EnforceAbstractClass(data.Value);
 			Result<HierarchyError.ClassNotPartial> partialCheck = EnforcePartialClass(data.Value);
 			Result<HierarchyError.ClassIsAbstract> notAbstractCheck = EnforceClassNotAbstract(data.Value);
-			Result<HierarchyError.DuplicatePropertyDefinitionsFound> duplicatePropertiesCheck = EnforceNoDuplicateProperties(data.Value);
+			Result<HierarchyError.DuplicatePropertyDefinitionsFound> duplicatePropertiesCheck = EnforceNoDuplicateProperties(data.Value, duplicateProperties);
 
 			IFieldSymbol? keyField = null;
 			if (data.Value is HierarchyData.DerivedTypeData derived)
@@ -64,15 +96,15 @@ public static partial class EnumHierarchy
 
 			if (errors.Any())
 			{
-				return new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutableArray());
+				return new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutable());
 			}
 
 			return data.Value switch
 			{
-				HierarchyData.BaseTypeData baseTypeData => new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new ValidatedHierarchyData.BaseTypeData(baseTypeData.Type)),
+				HierarchyData.BaseTypeData baseTypeData => new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new BaseTypeData(baseTypeData.Type)),
 				HierarchyData.DerivedTypeData derivedTypeData => derivedTypeData.LastAttributeIndex == derivedTypeData.HierarchyLevel
-					? new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new ValidatedHierarchyData.DerivedConcreteTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!))
-					: new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new ValidatedHierarchyData.DerivedAbstractTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!)),
+					? new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedConcreteTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!))
+					: new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedAbstractTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!)),
 				_ => throw new NotImplementedException()
 			};
 		}

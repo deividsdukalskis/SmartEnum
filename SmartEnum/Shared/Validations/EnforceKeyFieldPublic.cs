@@ -2,7 +2,7 @@ namespace SmartEnum.Shared;
 
 using Microsoft.CodeAnalysis;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<HierarchyError.KeyFieldNotPublic> EnforceKeyFieldPublic(HierarchyData.DerivedTypeData data, IFieldSymbol keyField)
 	{

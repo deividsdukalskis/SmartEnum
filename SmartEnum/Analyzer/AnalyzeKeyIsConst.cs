@@ -7,7 +7,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyIsConst(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyIsConst(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is HierarchyError.KeyFieldNotConst notConstError)
 		{

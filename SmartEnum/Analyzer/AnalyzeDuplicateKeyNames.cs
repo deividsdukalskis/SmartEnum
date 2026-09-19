@@ -7,7 +7,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeDuplicateKeyNames(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeDuplicateKeyNames(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is not HierarchyError.DuplicateKeyNamesFound duplicate)
 		{

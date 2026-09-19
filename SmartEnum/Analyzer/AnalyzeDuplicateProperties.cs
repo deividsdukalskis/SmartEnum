@@ -7,17 +7,17 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeDuplicateProperties(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeDuplicateProperties(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is not HierarchyError.DuplicatePropertyDefinitionsFound duplicateError)
 		{
 			return;
 		}
 
-		foreach (IGrouping<(string CommonParentTypeName, IPropertySymbol CurrentTypeProperty), string> commonParentTypeGroup in duplicateError.PropertiesWithSameName)
+		foreach (HierarchyError.DuplicatePropertyDefinitionsFound.DuplicateProperties propertyWithDuplicateName in duplicateError.PropertiesWithDuplicateName)
 		{
 			string typesWithSameProperties = string.Empty;
-			foreach (string propertyContainingType in commonParentTypeGroup)
+			foreach (string propertyContainingType in propertyWithDuplicateName.OtherTypeNamesWithDuplicatePropertyNames)
 			{
 				if (string.IsNullOrEmpty(typesWithSameProperties))
 				{
@@ -31,10 +31,10 @@ public sealed partial class SmartEnumAnalyzer
 
 			context.ReportDiagnostic(Diagnostic.Create(
 				DuplicateProperties,
-				commonParentTypeGroup.Key.CurrentTypeProperty.Locations.FirstOrDefault(),
-				commonParentTypeGroup.Key.CurrentTypeProperty.Name,
+				propertyWithDuplicateName.Property.Locations.FirstOrDefault(),
+				propertyWithDuplicateName.Property.Name,
 				typesWithSameProperties,
-				commonParentTypeGroup.Key.CommonParentTypeName));
+				propertyWithDuplicateName.CommonTypeName));
 		}
 	}
 }

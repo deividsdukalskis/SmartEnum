@@ -1,6 +1,6 @@
 namespace SmartEnum.Shared;
 
-public static partial class EnumHierarchy
+public abstract partial class ValidatedHierarchyData
 {
 	private static Result<HierarchyError.ClassNotAbstract> EnforceAbstractClass(HierarchyData data)
 	{

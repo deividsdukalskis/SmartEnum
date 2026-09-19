@@ -1,21 +1,49 @@
 ﻿namespace SmartEnum.Shared;
 
-using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using static SmartEnum.Shared.HierarchyError;
 
-public static partial class EnumHierarchy
+public abstract class HierarchyData
 {
-	public static ConcurrentBag<Result<HierarchyData, HierarchyError.DuplicateAttributesFound>> HierarchyDatas = new();
+	public INamedTypeSymbol Type { get; }
 
-	public static void CollectHierarchyData(INamedTypeSymbol type, INamedTypeSymbol attributeDefinition)
+	protected HierarchyData(INamedTypeSymbol type) => this.Type = type;
+
+	public class BaseTypeData : HierarchyData
+	{
+		public ImmutableArray<AttributeData> EnumAttributes { get; }
+
+		public BaseTypeData(INamedTypeSymbol type, ImmutableArray<AttributeData> enumAttributes) : base(type) => this.EnumAttributes = enumAttributes;
+	}
+
+	public class DerivedTypeData : HierarchyData
+	{
+		public INamedTypeSymbol BaseType { get; }
+		public AttributeData RelevantAttribute { get; }
+		public int LastAttributeIndex { get; }
+		public int HierarchyLevel { get; }
+
+		public DerivedTypeData(
+			INamedTypeSymbol type,
+			INamedTypeSymbol baseType,
+			AttributeData relevantAttribute,
+			int hierarchyLevel,
+			int lastAttributeIndex) : base(type)
+		{
+			this.BaseType = baseType;
+			this.RelevantAttribute = relevantAttribute;
+			this.HierarchyLevel = hierarchyLevel;
+			this.LastAttributeIndex = lastAttributeIndex;
+		}
+	}
+
+	public static Result<HierarchyData, HierarchyError> Collect(INamedTypeSymbol type, INamedTypeSymbol attributeDefinition)
 	{
 		bool previousClassHasAttributesApplied = false;
 		bool originalClassHasAttributesApplied = false;
 		int hierarchyLevel = -1;
-		List<string> parentNames = new();
 		INamedTypeSymbol? baseType = null;
 		INamedTypeSymbol? parentTypeWithDuplicateAttributes = null;
 		ImmutableArray<AttributeData> baseTypeEnumAttributes = new();
@@ -25,14 +53,9 @@ public static partial class EnumHierarchy
 			currentType = currentType.BaseType)
 		{
 			ImmutableArray<AttributeData> enumAttributes = currentType
-							.GetAttributes()
-							.Where(attrib => SymbolEqualityComparer.Default.Equals(attrib.AttributeClass?.OriginalDefinition, attributeDefinition))
-							.ToImmutableArray();
-
-			if (hierarchyLevel >= 0 && !previousClassHasAttributesApplied)
-			{
-				parentNames.Add(currentType.ToDisplayString());
-			}
+				.GetAttributes()
+				.Where(attrib => SymbolEqualityComparer.Default.Equals(attrib.AttributeClass?.OriginalDefinition, attributeDefinition))
+				.ToImmutableArray();
 
 			if (enumAttributes.Any())
 			{
@@ -59,41 +82,32 @@ public static partial class EnumHierarchy
 
 		if (baseType is null)
 		{
-			return;
+			return new Failure<HierarchyData, HierarchyError>(new NotInEnumHierarchy());
 		}
 
-		if (previousClassHasAttributesApplied)
+		if (parentTypeWithDuplicateAttributes is null)
 		{
 			if (originalClassHasAttributesApplied)
 			{
-				if (parentTypeWithDuplicateAttributes is null)
-				{
-					HierarchyDatas.Add(new Success<HierarchyData, HierarchyError.DuplicateAttributesFound>(new HierarchyData.BaseTypeData(baseType, baseTypeEnumAttributes)));
-				}
-				else
-				{
-					HierarchyDatas.Add(new Failure<HierarchyData, HierarchyError.DuplicateAttributesFound>(new(baseType, parentTypeWithDuplicateAttributes)));
-				}
+				return new Success<HierarchyData, HierarchyError>(new BaseTypeData(baseType, baseTypeEnumAttributes));
 			}
 			else
 			{
-				if (parentTypeWithDuplicateAttributes is null)
+				AttributeData? relevantAttribute = baseTypeEnumAttributes.ElementAtOrDefault(hierarchyLevel);
+				if (relevantAttribute is null)
 				{
-					AttributeData? relevantAttribute = baseTypeEnumAttributes.ElementAtOrDefault(hierarchyLevel);
-					if (relevantAttribute is null)
-					{
-						return;
-					}
-
-					HierarchyDatas.Add(new Success<HierarchyData, HierarchyError.DuplicateAttributesFound>(new HierarchyData.DerivedTypeData(
-						type,
-						baseType,
-						parentNames.ToImmutableArray(),
-						relevantAttribute,
-						hierarchyLevel,
-						baseTypeEnumAttributes.Count() - 1)));
+					return new Failure<HierarchyData, HierarchyError>(new RelevantAttributeNotFound());
 				}
+
+				return new Success<HierarchyData, HierarchyError>(new DerivedTypeData(
+					type,
+					baseType,
+					relevantAttribute,
+					hierarchyLevel,
+					baseTypeEnumAttributes.Count() - 1));
 			}
 		}
+
+		return new Failure<HierarchyData, HierarchyError>(new DuplicateAttributesFound(baseType, parentTypeWithDuplicateAttributes));
 	}
 }

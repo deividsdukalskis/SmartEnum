@@ -9,7 +9,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyFieldType(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyFieldType(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is not HierarchyError.KeyFieldInvalidType invalidTypeError)
 		{

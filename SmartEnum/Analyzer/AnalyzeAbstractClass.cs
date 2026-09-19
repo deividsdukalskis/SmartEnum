@@ -7,7 +7,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeAbstractClass(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeAbstractClass(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is HierarchyError.ClassNotAbstract abstractError)
 		{

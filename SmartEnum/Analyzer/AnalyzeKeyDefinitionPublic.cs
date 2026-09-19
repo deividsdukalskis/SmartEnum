@@ -11,7 +11,7 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumAnalyzer
 {
-	private void AnalyzeKeyDefinitionPublic(HierarchyError error, CompilationAnalysisContext context)
+	private void AnalyzeKeyDefinitionPublic(HierarchyError error, SymbolAnalysisContext context)
 	{
 		if (error is not HierarchyError.KeyFieldNotPublic notPublicError)
 		{
