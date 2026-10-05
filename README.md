@@ -111,6 +111,13 @@ changes to them as domain schema changes.
 
 ## Diagnostics
 
+To see all SmartEnum errors and warnings in Visual Studio, including those in
+closed files, set the solution/background analysis scope to **Entire solution**.
+Open **Tools → Options → Text Editor → C# → Advanced** and set
+**Run background code analysis for** to **Entire solution**.
+This enables live diagnostics across the solution without opening each file.
+See [Visual Studio live code analysis settings](https://learn.microsoft.com/en-us/visualstudio/code-quality/configure-live-code-analysis-scope-managed-code).
+
 | ID | Meaning |
 | --- | --- |
 | SMARTENUM001–002 | Incorrect abstract/partial declaration |

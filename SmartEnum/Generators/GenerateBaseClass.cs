@@ -28,6 +28,13 @@ public sealed partial class SmartEnumGenerator
 		return $$"""
 			{{GenerateConstructor(type, type, "protected")}}
 
+			/// <summary>
+			/// Warning: Maps data to a concrete type while bypassing the normal domain validation workflow.
+			/// Use only when plain data transfer is necessary, such as materializing ORM data into a business model.
+			/// </summary>
+			/// <remarks>
+			/// Custom constructors and property setters still execute and may perform their own validation.
+			/// </remarks>
 			public static {{TypeName(type)}} MapDataToTypeUnvalidated({{string.Join(", ", parameters)}})
 			{
 				{{Indent(string.Join("\n", branches))}}
