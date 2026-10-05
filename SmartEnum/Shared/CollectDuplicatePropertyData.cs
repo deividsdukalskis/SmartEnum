@@ -1,9 +1,9 @@
-﻿namespace SmartEnum.Shared;
+namespace SmartEnum.Shared;
 
-using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 
 public class DuplicatePropertyData
@@ -13,130 +13,61 @@ public class DuplicatePropertyData
 	public ImmutableArray<IPropertySymbol> DuplicateProperties { get; }
 
 	public DuplicatePropertyData(string duplicatePropertyName, INamedTypeSymbol commonParentType, ImmutableArray<IPropertySymbol> duplicateProperties)
-	{
-		this.DuplicatePropertyName = duplicatePropertyName;
-		this.CommonParentType = commonParentType;
-		this.DuplicateProperties = duplicateProperties;
-	}
+		=> (this.DuplicatePropertyName, this.CommonParentType, this.DuplicateProperties) = (duplicatePropertyName, commonParentType, duplicateProperties);
 
-	private class TypeHierarchyData
+	public static ImmutableArray<DuplicatePropertyData> Collect(Compilation compilation, INamedTypeSymbol attributeDefinition, CancellationToken cancellationToken = default)
 	{
-		public INamedTypeSymbol Type { get; }
-		public ImmutableArray<(INamedTypeSymbol Type, int HierarchyLevel)> HierarchyInfo { get; }
-
-		public TypeHierarchyData(INamedTypeSymbol type, ImmutableArray<(INamedTypeSymbol Type, int HierarchyLevel)> hierarchyInfo)
+		Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> hierarchies = new(SymbolEqualityComparer.Default);
+		Stack<INamespaceOrTypeSymbol> pending = new();
+		pending.Push(compilation.Assembly.GlobalNamespace);
+		while (pending.Count > 0)
 		{
-			this.Type = type;
-			this.HierarchyInfo = hierarchyInfo;
+			cancellationToken.ThrowIfCancellationRequested();
+			INamespaceOrTypeSymbol symbol = pending.Pop();
+			foreach (INamespaceOrTypeSymbol child in symbol.GetMembers().OfType<INamespaceOrTypeSymbol>()) pending.Push(child);
+			if (symbol is not INamedTypeSymbol type || HierarchyData.Collect(type, attributeDefinition) is not Success<HierarchyData, HierarchyError> collected) continue;
+			INamedTypeSymbol root = (collected.Value is HierarchyData.DerivedTypeData derived ? derived.BaseType : type).OriginalDefinition;
+			if (!hierarchies.TryGetValue(root, out List<INamedTypeSymbol>? types)) hierarchies.Add(root, types = new());
+			types.Add(type);
 		}
-	}
 
-	public static ImmutableArray<DuplicatePropertyData> Collect(Compilation compilation, INamedTypeSymbol attributeDefinition)
-	{
 		ImmutableArray<DuplicatePropertyData>.Builder result = ImmutableArray.CreateBuilder<DuplicatePropertyData>();
-		ImmutableArray<IGrouping<INamedTypeSymbol, TypeHierarchyData>> multipleHierarchyInfos = CollectTypeHierarchyData(compilation, attributeDefinition);
-		foreach (IGrouping<INamedTypeSymbol, TypeHierarchyData> singleHierarchyInfo in multipleHierarchyInfos)
+		foreach (KeyValuePair<INamedTypeSymbol, List<INamedTypeSymbol>> hierarchy in hierarchies)
 		{
-			List<(IPropertySymbol Property, ImmutableArray<INamedTypeSymbol> HierarchyData)> duplicateProperties = new();
-			foreach (TypeHierarchyData firstType in singleHierarchyInfo)
+			IEnumerable<IGrouping<string, IPropertySymbol>> groups = hierarchy.Value.SelectMany(type => type.GetMembers().OfType<IPropertySymbol>())
+				.Where(property => !property.IsStatic && !property.IsIndexer && !property.IsImplicitlyDeclared && property.ExplicitInterfaceImplementations.IsEmpty)
+				.GroupBy(property => property.Name);
+			foreach (IGrouping<string, IPropertySymbol> group in groups)
 			{
-				duplicateProperties.AddRange(firstType.Type
-					.GetMembers()
-					.OfType<IPropertySymbol>()
-					.Select(property => (Property: property, firstType.HierarchyInfo.Select(hierarchy => hierarchy.Type).ToImmutableArray()))
-					.Where(firstTypePropertyTuple =>
-						!duplicateProperties.Contains(firstTypePropertyTuple)
-						&& singleHierarchyInfo.Any(secondType =>
-							!SymbolEqualityComparer.Default.Equals(firstType.Type, secondType.Type)
-							&& secondType.Type.GetMembers().OfType<IPropertySymbol>().Any(secondTypeProperty => firstTypePropertyTuple.Property.Name == secondTypeProperty.Name))));
-			}
-
-			Func<IEnumerable<(IPropertySymbol Property, ImmutableArray<INamedTypeSymbol> HierarchyData)>, INamedTypeSymbol> findCommonParentType =
-				(IEnumerable<(IPropertySymbol Property, ImmutableArray<INamedTypeSymbol> HierarchyData)> hierarchyInfo) =>
+				cancellationToken.ThrowIfCancellationRequested();
+				ImmutableArray<IPropertySymbol> properties = group.ToImmutableArray();
+				if (properties.Select(GetOriginalProperty).Distinct(SymbolEqualityComparer.Default).Count() < 2) continue;
+				INamedTypeSymbol common = hierarchy.Key;
+				for (INamedTypeSymbol? ancestor = properties[0].ContainingType; ancestor is not null; ancestor = ancestor.BaseType)
 				{
-					int maxLength = hierarchyInfo.Select(list => list.HierarchyData.Count()).DefaultIfEmpty(0).Max();
+					if (!properties.All(property => HasAncestor(property.ContainingType, ancestor))) continue;
+					common = ancestor.OriginalDefinition;
+					break;
+				}
 
-					IEnumerable<ImmutableArray<INamedTypeSymbol>> set = Enumerable.Range(0, maxLength)
-						.Select(index => hierarchyInfo
-							.Where(list => index < list.HierarchyData.Count())
-							.Select(list => list.HierarchyData[index]).ToImmutableArray());
-
-					IEqualityComparer<INamedTypeSymbol> symbolComparer = SymbolEqualityComparer.Default;
-
-					return set.Last(x => x.Distinct(symbolComparer).Count() == 1 && x.Count() == hierarchyInfo.Count()).First();
-				};
-
-			IEnumerable<DuplicatePropertyData> groupedDuplicateProperties = duplicateProperties
-				.GroupBy(x => x.Property.Name)
-				.Select(x => new DuplicatePropertyData(x.Key, findCommonParentType(x.AsEnumerable()), x.Select(y => y.Property).ToImmutableArray()));
-
-			result.AddRange(groupedDuplicateProperties);
+				result.Add(new(group.Key, common, properties));
+			}
 		}
 
 		return result.ToImmutable();
 	}
 
-	private static ImmutableArray<IGrouping<INamedTypeSymbol, TypeHierarchyData>> CollectTypeHierarchyData(Compilation compilation, INamedTypeSymbol attributeDefinition)
+	private static IPropertySymbol GetOriginalProperty(IPropertySymbol property)
 	{
-		List<TypeHierarchyData> hierarchyData = new();
-		ImmutableArray<INamespaceOrTypeSymbol> symbols = compilation.Assembly.GlobalNamespace.GetMembers().ToImmutableArray();
-		foreach (INamespaceOrTypeSymbol symbol in symbols)
-		{
-			Stack<INamespaceOrTypeSymbol> symbolsToCheck = new();
-			symbolsToCheck.Push(symbol);
+		while (property.OverriddenProperty is not null) property = property.OverriddenProperty;
+		return property.OriginalDefinition;
+	}
 
-			while (symbolsToCheck.Any())
-			{
-				INamespaceOrTypeSymbol currentSymbol = symbolsToCheck.Pop();
-				if (currentSymbol is INamedTypeSymbol namedTypeSymbol)
-				{
-					bool previousClassHasAttributesApplied = false;
-					List<INamedTypeSymbol> parentTypes = new();
-					INamedTypeSymbol? baseType = null;
-					INamedTypeSymbol? parentTypeWithDuplicateAttributes = null;
-
-					for (INamedTypeSymbol? currentType = namedTypeSymbol;
-						currentType is not null && currentType.SpecialType != SpecialType.System_Object;
-						currentType = currentType.BaseType)
-					{
-						if (!previousClassHasAttributesApplied)
-						{
-							parentTypes.Add(currentType);
-						}
-
-						if (currentType.GetAttributes()
-							.Any(attrib => SymbolEqualityComparer.Default.Equals(attrib.AttributeClass?.OriginalDefinition, attributeDefinition)))
-						{
-							if (previousClassHasAttributesApplied)
-							{
-								parentTypeWithDuplicateAttributes = currentType;
-								break;
-							}
-
-							baseType = currentType;
-							previousClassHasAttributesApplied = true;
-						}
-					}
-
-					if (baseType is not null
-						&& previousClassHasAttributesApplied
-						&& parentTypeWithDuplicateAttributes is null)
-					{
-						parentTypes.Reverse();
-						hierarchyData.Add(new(namedTypeSymbol, parentTypes.Select((x, index) => (x, index)).ToImmutableArray()));
-					}
-				}
-
-				ImmutableArray<INamespaceOrTypeSymbol> childSymbols = currentSymbol.GetMembers().OfType<INamespaceOrTypeSymbol>().ToImmutableArray();
-				foreach (INamespaceOrTypeSymbol childSymbol in childSymbols)
-				{
-					symbolsToCheck.Push(childSymbol);
-				}
-			}
-		}
-
-		IEqualityComparer<INamedTypeSymbol> symbolComparer = SymbolEqualityComparer.Default;
-
-		return hierarchyData.GroupBy(x => x.HierarchyInfo.First().Type, symbolComparer).ToImmutableArray();
+	private static bool HasAncestor(INamedTypeSymbol type, INamedTypeSymbol ancestor)
+	{
+		HashSet<ISymbol> visited = new(SymbolEqualityComparer.Default);
+		for (INamedTypeSymbol? current = type; current is not null && visited.Add(current); current = current.BaseType)
+			if (SymbolEqualityComparer.Default.Equals(current.OriginalDefinition, ancestor.OriginalDefinition)) return true;
+		return false;
 	}
 }

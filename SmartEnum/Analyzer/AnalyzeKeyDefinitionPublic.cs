@@ -18,7 +18,7 @@ public sealed partial class SmartEnumAnalyzer
 			return;
 		}
 
-		Func<Location> getFieldAccessibilityModifierLocation = () =>
+		Location getFieldAccessibilityModifierLocation()
 		{
 			SyntaxNode? syntax = notPublicError.Field.DeclaringSyntaxReferences
 				.FirstOrDefault()?
@@ -53,7 +53,7 @@ public sealed partial class SmartEnumAnalyzer
 			return Location.Create(
 				declaration.SyntaxTree,
 				span);
-		};
+		}
 
 		context.ReportDiagnostic(Diagnostic.Create(KeyIsNotPublic, getFieldAccessibilityModifierLocation()));
 	}

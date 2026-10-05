@@ -3,5 +3,5 @@
 public partial class RescheduledEvent : ScheduledEvent
 {
 	public const string EventStatusSubtypeId = "rescheduled";
-	public string CreatedName { get; set; }
+	public required DateTime RescheduledAt { get; init; }
 }

@@ -6,4 +6,5 @@ using SmartEnum;
 [SmartEnum<string>("EventStatusSubtypeId")]
 public abstract partial class EventState
 {
+	public string CreatedName { get; }
 }

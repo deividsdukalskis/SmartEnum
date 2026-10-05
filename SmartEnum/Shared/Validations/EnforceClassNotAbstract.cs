@@ -2,23 +2,11 @@ namespace SmartEnum.Shared;
 
 public abstract partial class ValidatedHierarchyData
 {
-	private static Result<HierarchyError.ClassIsAbstract> EnforceClassNotAbstract(HierarchyData data)
-	{
-		if (data is not HierarchyData.DerivedTypeData derivedType)
-		{
-			return new Success<HierarchyError.ClassIsAbstract>();
-		}
-
-		if (derivedType.LastAttributeIndex != derivedType.HierarchyLevel)
-		{
-			return new Success<HierarchyError.ClassIsAbstract>();
-		}
-
-		if (!derivedType.Type.IsAbstract && !derivedType.Type.IsStatic)
-		{
-			return new Success<HierarchyError.ClassIsAbstract>();
-		}
-
-		return new Failure<HierarchyError.ClassIsAbstract>(new(derivedType.Type));
-	}
+	private static Result<HierarchyError.ClassIsAbstract> EnforceClassNotAbstract(HierarchyData data) => data is not HierarchyData.DerivedTypeData derivedType
+			? new Success<HierarchyError.ClassIsAbstract>()
+			: derivedType.LastAttributeIndex != derivedType.HierarchyLevel
+			? new Success<HierarchyError.ClassIsAbstract>()
+			: !derivedType.Type.IsAbstract && !derivedType.Type.IsStatic
+			? new Success<HierarchyError.ClassIsAbstract>()
+			: new Failure<HierarchyError.ClassIsAbstract>(new(derivedType.Type));
 }

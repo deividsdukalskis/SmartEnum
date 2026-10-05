@@ -94,19 +94,16 @@ public abstract partial class ValidatedHierarchyData
 			if (notAbstractCheck is Failure<HierarchyError.ClassIsAbstract> failure5) errors.Add(failure5.Error);
 			if (duplicatePropertiesCheck is Failure<HierarchyError.DuplicatePropertyDefinitionsFound> failure6) errors.Add(failure6.Error);
 
-			if (errors.Any())
-			{
-				return new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutable());
-			}
-
-			return data.Value switch
-			{
-				HierarchyData.BaseTypeData baseTypeData => new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new BaseTypeData(baseTypeData.Type)),
-				HierarchyData.DerivedTypeData derivedTypeData => derivedTypeData.LastAttributeIndex == derivedTypeData.HierarchyLevel
-					? new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedConcreteTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!))
-					: new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedAbstractTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!)),
-				_ => throw new NotImplementedException()
-			};
+			return errors.Any()
+				? new Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(errors.ToImmutable())
+				: data.Value switch
+				{
+					HierarchyData.BaseTypeData baseTypeData => new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new BaseTypeData(baseTypeData.Type)),
+					HierarchyData.DerivedTypeData derivedTypeData => derivedTypeData.LastAttributeIndex == derivedTypeData.HierarchyLevel
+						? new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedConcreteTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!))
+						: new Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>>(new DerivedAbstractTypeData(derivedTypeData.Type, derivedTypeData.BaseType, keyField!)),
+					_ => throw new NotImplementedException()
+				};
 		}
 	}
 }

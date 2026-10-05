@@ -1,9 +1,9 @@
 namespace SmartEnum.Shared;
 
+using System.Linq;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis;
-using System.Linq;
 
 public abstract partial class ValidatedHierarchyData
 {
@@ -11,14 +11,9 @@ public abstract partial class ValidatedHierarchyData
 	{
 		bool isPartial = data.Type.DeclaringSyntaxReferences
 			.Select(r => r.GetSyntax())
-			.OfType<ClassDeclarationSyntax>()
+			.OfType<TypeDeclarationSyntax>()
 			.Any(c => c.Modifiers.Any(SyntaxKind.PartialKeyword));
 
-		if (isPartial)
-		{
-			return new Success<HierarchyError.ClassNotPartial>();
-		}
-
-		return new Failure<HierarchyError.ClassNotPartial>(new(data.Type));
+		return isPartial ? new Success<HierarchyError.ClassNotPartial>() : new Failure<HierarchyError.ClassNotPartial>(new(data.Type));
 	}
 }

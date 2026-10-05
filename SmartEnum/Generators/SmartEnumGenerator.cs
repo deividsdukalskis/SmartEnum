@@ -1,12 +1,11 @@
-﻿namespace SmartEnum.Generators;
+namespace SmartEnum.Generators;
 
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
-using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using SmartEnum.Generators.Models;
 using SmartEnum.Shared;
 
 [Generator(LanguageNames.CSharp)]
@@ -14,59 +13,50 @@ public sealed partial class SmartEnumGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-		IncrementalValueProvider<ImmutableArray<GenerationModel>> values = context.SyntaxProvider.ForAttributeWithMetadataName(
-			"SmartEnum.SmartEnumAttribute`1",
-			(node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
-			(attributeContext, cancellationToken) =>
+		IncrementalValuesProvider<INamedTypeSymbol> types = context.SyntaxProvider.CreateSyntaxProvider(
+			static (node, _) => node is ClassDeclarationSyntax or RecordDeclarationSyntax,
+			static (ctx, ct) => (INamedTypeSymbol)ctx.SemanticModel.GetDeclaredSymbol(ctx.Node, ct)!);
+
+		context.RegisterSourceOutput(context.CompilationProvider.Combine(types.Collect()), static (output, input) =>
+		{
+			(Compilation? compilation, ImmutableArray<INamedTypeSymbol> symbols) = input;
+			INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName("SmartEnum.SmartEnumAttribute`1");
+			if (attribute is null) return;
+
+			Lazy<ImmutableArray<DuplicatePropertyData>> duplicates = new(() => DuplicatePropertyData.Collect(compilation, attribute, output.CancellationToken));
+			HashSet<ISymbol> seen = new(SymbolEqualityComparer.Default);
+			Dictionary<INamedTypeSymbol, ValidatedHierarchyData> valid = new(SymbolEqualityComparer.Default);
+			foreach (INamedTypeSymbol? type in symbols)
 			{
-				cancellationToken.ThrowIfCancellationRequested();
-				if (attributeContext.TargetSymbol is not INamedTypeSymbol type)
+				output.CancellationToken.ThrowIfCancellationRequested();
+				if (seen.Add(type) && ValidatedHierarchyData.Validate(HierarchyData.Collect(type, attribute), duplicates)
+					is Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>> success)
 				{
-					return null;
+					valid.Add(type, success.Value);
 				}
+			}
 
-				ValidationResult result = SharedFunctions.Validate(type, attributeContext.Attributes[0].AttributeClass!.OriginalDefinition);
-				if (!result.IsInEnumHierarchy || !result.HasAllChecksPassed || result.BaseClass is null)
-				{
-					return null;
-				}
-
-				IEnumerable<IPropertySymbol> properties = result.BaseClass.GetMembers()
-					.Where(member => member.Kind is SymbolKind.Property)
-					.Select(prop => (IPropertySymbol)prop);
-				GenerationModel generationModel = new(result.BaseClass, result.IsBaseClass ? null : result.OriginalClass, result.FieldValidationResult.FieldInfo, properties.ToImmutableArray());
-				return generationModel;
-			})
-			.Where((result) => result is not null)
-			.Select((result, cancellationToken) =>
+			foreach (ValidatedHierarchyData.BaseTypeData root in valid.Values.OfType<ValidatedHierarchyData.BaseTypeData>())
 			{
-				cancellationToken.ThrowIfCancellationRequested();
-				return result!;
-			})
-			.Collect();
-
-		context.RegisterSourceOutput(
-			values,
-			(productionContext, models) =>
-			{
-				ParallelLoopResult result = Parallel.ForEach(models, (model) =>
+				output.CancellationToken.ThrowIfCancellationRequested();
+				INamedTypeSymbol[] members = valid.Keys.Where(type => GetPath(type, root.Type).Count > 0)
+					.OrderBy(type => type.ToDisplayString(), StringComparer.Ordinal).ToArray();
+				// A descendant cannot be generated unless its entire constructor chain is valid.
+				members = members.Where(type => GetPath(type, root.Type).All(ancestor => valid.ContainsKey(ancestor.OriginalDefinition))).ToArray();
+				if (!ValidateGeneration(output, compilation, root.Type, members, attribute)) continue;
+				INamedTypeSymbol[] mappedMembers = members.Select(type => MapToRoot(type, root.Type)!).ToArray();
+				foreach (INamedTypeSymbol? type in members)
 				{
-					this.GenerateDerivedAbstractClassConstructor(productionContext, model);
-					this.GenerateDerivedClassConstructorAndFactoryMethod(productionContext, model);
-				});
-
-				if (!result.IsCompleted)
-				{
-					return;
+					output.CancellationToken.ThrowIfCancellationRequested();
+					string body = valid[type] switch
+					{
+						ValidatedHierarchyData.BaseTypeData => GenerateBaseClass(type, mappedMembers, attribute),
+						ValidatedHierarchyData.DerivedConcreteTypeData => GenerateDerivedConcreteClass(type, root.Type),
+						_ => GenerateDerivedAbstractClass(type, root.Type)
+					};
+					output.AddSource(GetHintName(type), WrapType(type, body));
 				}
-
-				GenerationModel? baseModel = models.FirstOrDefault(model => model.DerivedClass is null);
-				if (baseModel is null)
-				{
-					return;
-				}
-
-				this.GenerateBaseClassConstructorAndFactoryMethod(productionContext, baseModel, models.Where(model => model.DerivedClass is not null).ToImmutableArray());
-			});
+			}
+		});
 	}
 }

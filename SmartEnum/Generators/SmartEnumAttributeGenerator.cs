@@ -15,7 +15,7 @@ public sealed class SmartEnumAttributeGenerator : IIncrementalGenerator
 				[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
 				internal sealed class SmartEnumAttribute<TKey> : Attribute
 				{
-					public string KeyName { get; set; }
+					public string KeyName { get; }
 
 					public SmartEnumAttribute(string keyName) => this.KeyName = keyName;
 				}

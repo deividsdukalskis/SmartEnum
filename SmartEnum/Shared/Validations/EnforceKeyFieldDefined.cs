@@ -11,11 +11,8 @@ public abstract partial class ValidatedHierarchyData
 		ITypeSymbol? intendedKeyType = data.RelevantAttribute.AttributeClass?.TypeArguments.FirstOrDefault();
 		IFieldSymbol? field = data.Type.GetMembers(keyName ?? string.Empty).OfType<IFieldSymbol>().FirstOrDefault();
 
-		if (intendedKeyType is null || field is null)
-		{
-			return new Failure<(IFieldSymbol Field, ITypeSymbol IntendedType), HierarchyError.KeyFieldNotDefined>(new(data.Type, keyName ?? string.Empty, intendedKeyType?.ToDisplayString() ?? string.Empty));
-		}
-
-		return new Success<(IFieldSymbol Field, ITypeSymbol IntendedType), HierarchyError.KeyFieldNotDefined>((field, intendedKeyType));
+		return intendedKeyType is null || field is null
+			? new Failure<(IFieldSymbol Field, ITypeSymbol IntendedType), HierarchyError.KeyFieldNotDefined>(new(data.Type, keyName ?? string.Empty, intendedKeyType?.ToDisplayString() ?? string.Empty))
+			: new Success<(IFieldSymbol Field, ITypeSymbol IntendedType), HierarchyError.KeyFieldNotDefined>((field, intendedKeyType));
 	}
 }

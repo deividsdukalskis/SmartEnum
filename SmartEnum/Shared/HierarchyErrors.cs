@@ -139,5 +139,9 @@ public abstract class HierarchyError
 
 	public class NotInEnumHierarchy : HierarchyError { }
 
-	public class RelevantAttributeNotFound : HierarchyError { }
+	public class RelevantAttributeNotFound : HierarchyError
+	{
+		public INamedTypeSymbol Type { get; }
+		public RelevantAttributeNotFound(INamedTypeSymbol type) => this.Type = type;
+	}
 }

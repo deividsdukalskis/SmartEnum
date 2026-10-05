@@ -40,6 +40,8 @@ public sealed partial class SmartEnumAnalyzer : DiagnosticAnalyzer
 				{
 					foreach (HierarchyError error in failure.Error)
 					{
+						if (error is HierarchyError.RelevantAttributeNotFound depth)
+							context.ReportDiagnostic(Diagnostic.Create(InvalidHierarchyDepth, depth.Type.Locations[0], depth.Type.Name));
 						this.AnalyzeDuplicateAttributes(error, context);
 						this.AnalyzeDuplicateKeyNames(error, context);
 						this.AnalyzeDuplicateProperties(error, context);

@@ -16,20 +16,17 @@ public sealed partial class SmartEnumAnalyzer
 			return;
 		}
 
-		Func<Location> getFieldTypeLocation = () =>
+		Location getFieldTypeLocation()
 		{
 			SyntaxNode? syntax = invalidTypeError.Field.DeclaringSyntaxReferences
 				.FirstOrDefault()?
 				.GetSyntax(context.CancellationToken);
 
-			if (syntax is VariableDeclaratorSyntax variable &&
-				variable.Parent?.Parent is FieldDeclarationSyntax declaration)
-			{
-				return declaration.Declaration.Type.GetLocation();
-			}
-
-			return invalidTypeError.Field.Locations.FirstOrDefault() ?? Location.None;
-		};
+			return syntax is VariableDeclaratorSyntax variable &&
+				variable.Parent?.Parent is FieldDeclarationSyntax declaration
+				? declaration.Declaration.Type.GetLocation()
+				: invalidTypeError.Field.Locations.FirstOrDefault() ?? Location.None;
+		}
 
 		context.ReportDiagnostic(Diagnostic.Create(
 			InvalidKeyType,

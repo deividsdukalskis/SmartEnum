@@ -1,4 +1,4 @@
-﻿namespace SmartEnum.Analyzer;
+namespace SmartEnum.Analyzer;
 
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
@@ -16,115 +16,109 @@ public sealed partial class SmartEnumAnalyzer
 		DuplicateAttributes,
 		DuplicateKeyNames,
 		MustNotBeAbstractClass,
-		DuplicateProperties);
+		DuplicateProperties,
+		InvalidHierarchyDepth);
 
-	private DiagnosticDescriptor MustBeAbstractClass = new(
+	private static readonly DiagnosticDescriptor InvalidHierarchyDepth = new(
+		"SMARTENUM014", "Invalid hierarchy depth", "Class '{0}' extends beyond the declared SmartEnum key levels",
+		"SmartEnum", DiagnosticSeverity.Error, true);
+
+	private static readonly DiagnosticDescriptor MustBeAbstractClass = new(
 		id: "SMARTENUM001",
 		title: "Class must be abstract",
 		messageFormat:
 			"Class must be defined abstract",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor MustBePartialClass = new(
+	private static readonly DiagnosticDescriptor MustBePartialClass = new(
 		id: "SMARTENUM002",
 		title: "Class must be partial",
 		messageFormat:
 			"Class must be defined partial",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor InvalidKeyName = new(
+	private static readonly DiagnosticDescriptor InvalidKeyName = new(
 		id: "SMARTENUM003",
 		title: "Invalid key name",
 		messageFormat:
 			"'{0}' may not resolve to a proper field name",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor KeyFieldDoesNotExist = new(
+	private static readonly DiagnosticDescriptor KeyFieldDoesNotExist = new(
 		id: "SMARTENUM004",
 		title: "Key does not exist",
 		messageFormat:
 			"Class must define key 'public const {0} {1}'",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor KeyIsNotPublic = new(
+	private static readonly DiagnosticDescriptor KeyIsNotPublic = new(
 		id: "SMARTENUM005",
 		title: "Key is not public",
 		messageFormat:
 			"Field must be declared public",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor KeyIsNotConst = new(
+	private static readonly DiagnosticDescriptor KeyIsNotConst = new(
 		id: "SMARTENUM006",
 		title: "Key is not const",
 		messageFormat:
 			"Field must be declared const",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor InvalidKeyType = new(
+	private static readonly DiagnosticDescriptor InvalidKeyType = new(
 		id: "SMARTENUM007",
 		title: "Invalid key type",
 		messageFormat:
 			"Field must have type '{0}', but is declared as '{1}'",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor DuplicateAttributes = new(
+	private static readonly DiagnosticDescriptor DuplicateAttributes = new(
 		id: "SMARTENUM008",
 		title: "Duplicate attributes",
 		messageFormat:
 			"Parent class '{0}' already applies SmartEnum attributes",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor DuplicateKeyNames = new(
+	private static readonly DiagnosticDescriptor DuplicateKeyNames = new(
 		id: "SMARTENUM009",
 		title: "Duplicate key names",
 		messageFormat:
 			"Duplicate key names '{0}' found",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor MustNotBeAbstractClass = new(
+	private static readonly DiagnosticDescriptor MustNotBeAbstractClass = new(
 		id: "SMARTENUM010",
 		title: "Class must not be abstract",
 		messageFormat:
 			"Class must not be defined abstract",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 
-	private DiagnosticDescriptor DuplicateProperties = new(
+	private static readonly DiagnosticDescriptor DuplicateProperties = new(
 		id: "SMARTENUM011",
 		title: "Property must have unique name",
 		messageFormat:
 			"'{0}' is already defined in {1}. Consider moving that property to shared parent class '{2}' or higher up the inheritance chain.",
 		category: "SmartEnum",
 		defaultSeverity: DiagnosticSeverity.Error,
-		isEnabledByDefault: true,
-		customTags: new[] { WellKnownDiagnosticTags.CompilationEnd });
+		isEnabledByDefault: true);
 }

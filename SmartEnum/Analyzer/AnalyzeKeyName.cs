@@ -16,16 +16,11 @@ public sealed partial class SmartEnumAnalyzer
 			return;
 		}
 
-		Func<AttributeData, Location> getAttribLocation = (attrib) =>
+		Location getAttribLocation(AttributeData attrib)
 		{
 			SyntaxNode? syntax = attrib.ApplicationSyntaxReference?.GetSyntax(context.CancellationToken);
-			if (syntax is AttributeSyntax attributeSyntax)
-			{
-				return attributeSyntax.ArgumentList?.GetLocation() ?? Location.None;
-			}
-
-			return Location.None;
-		};
+			return syntax is AttributeSyntax attributeSyntax ? attributeSyntax.ArgumentList?.GetLocation() ?? Location.None : Location.None;
+		}
 
 		foreach ((AttributeData attrib, string name) in invalidKeyError.AttributesWithInvalidKeyNames)
 		{

@@ -18,17 +18,14 @@ public abstract partial class ValidatedHierarchyData
 		ImmutableArray<(AttributeData, object?)> keyNames = baseType.EnumAttributes.Select(arg => (arg, arg.ConstructorArguments.FirstOrDefault().Value)).ToImmutableArray();
 		foreach ((AttributeData attrib, object? keyName) tuple in keyNames)
 		{
-			if (tuple.keyName is string name && !SyntaxFacts.IsValidIdentifier(name))
+			if (tuple.keyName is not string name || (!SyntaxFacts.IsValidIdentifier(name) && SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None) || name.StartsWith("@"))
 			{
-				attributesWithInvalidKeyNames.Add((tuple.attrib, name));
+				attributesWithInvalidKeyNames.Add((tuple.attrib, tuple.keyName as string ?? "<null>"));
 			}
 		}
 
-		if (!attributesWithInvalidKeyNames.Any())
-		{
-			return new Success<HierarchyError.InvalidKeyName>();
-		}
-
-		return new Failure<HierarchyError.InvalidKeyName>(new(baseType.Type, attributesWithInvalidKeyNames.ToImmutable()));
+		return !attributesWithInvalidKeyNames.Any()
+			? new Success<HierarchyError.InvalidKeyName>()
+			: new Failure<HierarchyError.InvalidKeyName>(new(baseType.Type, attributesWithInvalidKeyNames.ToImmutable()));
 	}
 }
