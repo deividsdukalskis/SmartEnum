@@ -9,6 +9,11 @@
 		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
 		<TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeSmartEnumAnalyzerInPackage</TargetsForTfmSpecificContentInPackage>
 		<IsRoslynComponent>true</IsRoslynComponent>
+		<PackageId>SmartEnum</PackageId>
+		<Version>0.1.0</Version>
+		<Authors>deividsdukalskis</Authors>
+		<RepositoryUrl>https://github.com/deividsdukalskis/SmartEnum</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Description>Compile-time analyzers and construction generators for typed SmartEnum hierarchies.</Description>
 	</PropertyGroup>

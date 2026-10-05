@@ -1,0 +1,66 @@
+name: Publish NuGet
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'New package version (for example 0.1.0 or 0.2.0-beta.1)'
+        required: true
+        default: '0.1.0'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-nuget
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'deividsdukalskis/SmartEnum'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.401'
+
+      - name: Validate version
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          $identifier = '(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+          $pattern = '\A(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-' + $identifier + '(?:\.' + $identifier + ')*)?\z'
+          if ($env:PACKAGE_VERSION -cnotmatch $pattern) {
+            throw 'Enter a SemVer version without build metadata, for example 0.1.0 or 0.2.0-beta.1.'
+          }
+
+      - name: Verify build, regressions, and package consumer
+        run: ./Verify.ps1
+
+      - name: Pack release
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          dotnet pack SmartEnum/SmartEnum.csproj -c Release --no-restore -o bin/publish "-p:PackageVersion=$env:PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Packing failed.' }
+
+      - name: Publish to GitHub Packages
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $package = "bin/publish/SmartEnum.$env:PACKAGE_VERSION.nupkg"
+          dotnet nuget push $package --source 'https://nuget.pkg.github.com/deividsdukalskis/index.json' --api-key $env:GITHUB_TOKEN
+          if ($LASTEXITCODE -ne 0) { throw 'Publishing failed. Check package permissions and use a new version for each release.' }

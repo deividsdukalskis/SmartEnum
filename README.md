@@ -124,6 +124,8 @@ changes to them as domain schema changes.
 
 ## Verify and package
 
+For private publishing and installation, see [GitHub Packages setup](docs/github-packages.md).
+
 ```powershell
 ./Verify.ps1
 ```
