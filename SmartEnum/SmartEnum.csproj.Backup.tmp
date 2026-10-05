@@ -7,7 +7,6 @@
 		<Nullable>enable</Nullable>
 		<IncludeBuildOutput>false</IncludeBuildOutput>
 		<SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
-		<TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeSmartEnumAnalyzerInPackage</TargetsForTfmSpecificContentInPackage>
 		<IsRoslynComponent>true</IsRoslynComponent>
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<Description>Compile-time analyzers and construction generators for typed SmartEnum hierarchies.</Description>
@@ -15,14 +14,9 @@
 
 	<ItemGroup>
 		<PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.6.0" PrivateAssets="all" />
+		<None Remove="bin\Debug\netstandard2.0\SmartEnum.dll" />
+		<None Include="$(OutputPath)$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
 		<None Include="../README.md" Pack="true" PackagePath="/" />
 	</ItemGroup>
-
-	<!-- Include build output only while packing, not as an IDE project item. -->
-	<Target Name="IncludeSmartEnumAnalyzerInPackage">
-		<ItemGroup>
-			<TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers/dotnet/cs" />
-		</ItemGroup>
-	</Target>
 
 </Project>
