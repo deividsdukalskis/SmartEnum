@@ -15,7 +15,7 @@ internal static class EdgeCases
 				public abstract partial class Middle : Root { public new const int Id = 1; }
 				public partial class Leaf : Middle { public const int key_Id = 2; }
 				public static class RegressionProbe { public static void Verify() {
-				 if (Root.MapDataToTypeUnvalidated(1, 2, 42).Id != 42) throw new System.Exception();
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { key_Id = 1, key_key_Id = 2, Id = 42 }).Id != 42) throw new System.Exception();
 				} }
 				""");
 			yield return new("explicit private backing field values are preserved", """
@@ -27,7 +27,7 @@ internal static class EdgeCases
 				public partial class Leaf : Root { public const int Id = 1; }
 				public static class RegressionProbe { public static void Verify() {
 				 if (Leaf.ConstructUnvalidated(Name: "text", text: "stored").Name != "stored") throw new System.Exception();
-				 if (Root.MapDataToTypeUnvalidated(Id: 1, Name: "text", text: "mapped").Name != "mapped") throw new System.Exception();
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "text", text = "mapped" }).Name != "mapped") throw new System.Exception();
 				} }
 				""");
 			yield return new("internal branch cannot expose internal mapper data", """
@@ -90,7 +90,8 @@ internal static class EdgeCases
 					[SmartEnum<{{type}}>("Id")] public abstract partial class Root { }
 					public partial class Leaf : Root { public const {{type}} Id = {{literal}}; }
 					public static class RegressionProbe { public static void Verify() {
-					 if (Root.MapDataToTypeUnvalidated(Leaf.Id) is not Leaf) throw new System.Exception();
+					 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = Leaf.Id }) is not Leaf) throw new System.Exception();
+					 if (!System.Collections.Generic.EqualityComparer<{{type}}>.Default.Equals(Leaf.ConstructUnvalidated().Flatten().Id, Leaf.Id)) throw new System.Exception();
 					} }
 					""");
 			}
@@ -106,8 +107,10 @@ internal static class EdgeCases
 				public static class RegressionProbe { public static void Verify() {
 				 for (int parent = -1; parent <= 8; parent++) for (int child = -1; child <= 8; child++) {
 				  bool valid = parent >= 0 && parent < 8 && child >= 0 && child < 8;
-				  try { var result = Root.MapDataToTypeUnvalidated(parent, child);
+				  try { var result = Root.MapFromFlattenedDataUnvalidated(new RootFlattened { ParentId = parent, ChildId = child });
 				   if (!valid || result.GetType().Name != $"Leaf{parent}_{child}") throw new System.Exception();
+				   var flat = result.Flatten();
+				   if (flat.ParentId != parent || flat.ChildId != child || Root.MapFromFlattenedDataUnvalidated(flat).GetType() != result.GetType()) throw new System.Exception();
 				  } catch (System.ArgumentException) { if (valid) throw; }
 				 }
 				} }

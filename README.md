@@ -29,8 +29,16 @@ for a discriminator declared as `@class`.
 - Roots and intermediate types receive protected constructors.
 - Concrete types receive private constructors and public static
   `ConstructUnvalidated` factories.
-- The root receives public static `MapDataToTypeUnvalidated`. It checks **every**
-  discriminator in a concrete type's path and calls that type's factory.
+- A sealed partial `<RootName>Flattened` transfer class contains public get/set properties
+  for hierarchy data and discriminator constants. It shares the root's namespace,
+  enclosing type, accessibility and generic parameters/constraints.
+- The root receives public static `MapFromFlattenedDataUnvalidated`, accepting
+  one flattened model. It checks **every** discriminator in a concrete type's path
+  and calls that type's factory.
+- The root's public instance `Flatten()` returns a new flattened model containing
+  the instance's current data and discriminator values, including private fields.
+  Copies are shallow by default; partial customization hooks can clone values in
+  either direction without adding a runtime serialization dependency.
 - Unknown combinations throw `ArgumentException`. Comparisons use
   `EqualityComparer<TKey>.Default`, including null strings and floating-point NaN.
 - Compatible explicitly written data constructors are reused. They must be
@@ -55,11 +63,17 @@ names must be unique throughout the hierarchy except for overrides of the same
 contract. Multiple incompatible data types under one name are diagnosed.
 
 Private fields retain their visibility and use their declared names as parameters
-in constructors, `ConstructUnvalidated` and `MapDataToTypeUnvalidated`. Inherited
+in constructors and `ConstructUnvalidated`, and as flattened properties. Inherited
 private fields are initialized by the constructor of their declaring class.
 Field types must be accessible to the generated public factories, and duplicate
 data names within an inheritance path are diagnosed. This adds required parameters
 for existing private fields, so update factory calls when upgrading.
+
+Apply `[SmartEnumIgnore]` to a field or property to exclude it from constructors,
+factories and flattened data. This is useful for secrets, caches and transient
+state. Initialize ignored members in your own code or with member initializers.
+Required members cannot be ignored. Private fields that are included become public
+transfer properties and may be serialized; private visibility is not a redaction rule.
 
 If a writable property and its explicit backing field are both present, both
 become parameters. Constructors assign properties first and explicit fields last
@@ -67,25 +81,79 @@ within each class, preserving the supplied field values even when a setter write
 to those fields. Compiler-generated auto-property backing fields are never exposed
 as separate parameters.
 
-The mapper accepts keys in attribute order, followed by the union of hierarchy
-data. **Use named arguments**: ordering across branches is deterministic, but
-adding a branch can change the positional signature. Every argument is required,
-including data used by other branches; only the selected branch's data is
-forwarded. Conflicting key parameter names receive repeated `key_` prefixes.
+The flattened model contains the union of hierarchy data. Properties not present
+in every concrete branch are nullable and remain null when `Flatten()` is called
+on another branch. Shared properties retain their declared types. Discriminator
+properties retain their key types; conflicting names receive repeated `key_`
+prefixes. Ordinary constants are excluded.
+
+Null input throws `ArgumentNullException`. The model tracks property assignments,
+so omitted discriminators and omitted non-nullable data required by the selected
+branch throw `ArgumentException`, even when their default is zero or false.
+Explicit zero/false values remain valid. Null non-nullable references are rejected;
+nullable data may remain null. These are transfer-shape checks, not domain rules.
+Discriminator nulls are valid when explicitly supplied and matched by a null key.
+
+Populated properties from another branch are rejected to prevent silent data loss.
+Pass `rejectUnusedData: false` to explicitly allow discarding them. Computed snapshot
+values are informational and are not restored. Property setters track assignments
+when using object initializers or ordinary deserialization; transport that fills
+backing fields directly is unsupported. Presence reflects assignments to the current
+model, not whether a value was originally supplied before an earlier serialization.
+
+Computed getters remain excluded by default because they may have side effects.
+Apply `[SmartEnumSnapshot]` to copy a computed property's current value into the
+flattened model. Restoration recomputes it from actual constructor data and ignores
+the supplied snapshot. Write-only data still cannot be flattened.
+
+`MapFromFlattenedDataUnvalidated` is the preferred API. A hidden-from-IntelliSense
+`MapDataToTypeUnvalidated` compatibility adapter retains the original argument
+list and permits unused branch data. It delegates to the new mapper, including its
+null checks. An existing user-defined method with that signature is preserved.
+`ConstructUnvalidated` retains its parameters except for explicitly ignored data.
 
 No domain validation is added. Custom setters and reused constructors execute
 normally and can perform their own validation or throw exceptions.
 
 ```csharp
-var state = EventState.MapDataToTypeUnvalidated(
-    EventStatusId: "cancelled",
-    EventStatusSubtypeId: "rescheduled",
-    CreatedName: "Carol",
-    CancellationReason: "Weather",
-    ScheduledAt: default,
-    RescheduledAt: default);
+var data = new EventStateFlattened
+{
+    EventStatusId = "cancelled",
+    EventStatusSubtypeId = "rescheduled",
+    CreatedName = "Carol",
+    CancellationReason = "Weather"
+};
+EventState state = EventState.MapFromFlattenedDataUnvalidated(data);
 // CancelledRescheduledEvent, even though RescheduledEvent shares the subtype key.
+EventStateFlattened flattened = state.Flatten();
+// ScheduledAt and RescheduledAt are null for this branch.
+EventState restored = EventState.MapFromFlattenedDataUnvalidated(flattened);
 ```
+
+## Copy and transfer customization
+
+Extend the generated flattened class with a compatible partial class to add
+application-specific properties or methods. Generated property names are reserved.
+Implement either optional hook in the root's partial declaration:
+
+```csharp
+partial void CustomizeFlattenedData(EventStateFlattened data)
+{
+    // Clone mutable values, populate custom properties, or redact optional data.
+}
+
+static partial void CustomizeFlattenedInput(ref EventStateFlattened data)
+{
+    // Replace data with a detached copy before restoration, if needed.
+}
+```
+
+The output hook runs after the hierarchy is read. The input hook runs after the
+initial null check and before transfer checks and construction. To avoid mutating
+the caller's transfer object, replace `data` with a new model in the input hook.
+Both hooks may throw. They let applications define deep-copy behavior for cycles,
+shared references and custom object types; no automatic universal clone is attempted.
+Use `[SmartEnumIgnore]` rather than redaction when state must never enter the model.
 
 ## Generics, records and parent constructors
 
@@ -96,10 +164,25 @@ concrete type arguments from the root. Generic containers and matching generic
 constraints are supported. Example: `Leaf<U> : Root<U>` generates factories for
 `Root<T>` that construct `Leaf<T>`.
 
+Unconstrained generic branch values are supported using the nested nullable
+`OptionalValue<T>?` transfer type. A null wrapper means the branch value is absent;
+a present wrapper can hold zero, false, or a nullable reference. Values convert
+implicitly when assigning the property (`data.Value = 42`); read the payload with
+`data.Value?.Value`. Supply a wrapper explicitly to represent present-null data.
+Constrained reference/value types keep their ordinary nullable property types.
+This changes the JSON shape of unconstrained branch values to `{ "Value": ... }`.
+
 For a parent outside the SmartEnum hierarchy, generation prefers an accessible
 parameterless constructor. Otherwise it forwards arguments to the sole accessible
 constructor. These arguments appear before root data and receive `base_` prefixes.
-External parent state remains that parent's responsibility. Required external
+For reverse mapping, each argument needs an accessible readable instance field
+or property of the same name (ignoring case) and type on the external parent.
+`Flatten()` reads its current value, not the original constructor input. Arguments
+without readable state are diagnosed. Add
+`[SmartEnumParentData("constructorParameter", "ReadableMember")]` to the root to
+use a differently named member, including a private computed projection on the
+root. Explicit names are case-sensitive and their types must match the constructor
+parameter. Required external
 state must be initialized by a constructor declaring `SetsRequiredMembers`.
 
 ## Remaining boundaries
@@ -116,12 +199,21 @@ state must be initialized by a constructor declaring `SetsRequiredMembers`.
 - Ambiguous external constructor overloads, ref/in/out parent arguments,
   inaccessible data types, unsafe/ref-like data and conflicting generated
   signatures require explicit model changes.
+- Custom flattened declarations must be compatible partial classes and cannot
+  redefine generated properties. `OptionalValue` and the `__SmartEnum` prefix
+  are reserved for generated state.
 
 Hierarchies must be declared in the consumer compilation. A generator cannot
 add a mapper to a root already compiled into another assembly. The mapper is a
 closed view of the concrete types present in the compilation; there is no runtime
 registration of additional types. Persist the explicit key values, and treat
 changes to them as domain schema changes.
+
+`Flatten()` rejects runtime types outside that generated set, including unregistered
+ORM proxy subclasses, instead of silently dropping their additional state. Custom
+getters, setters and constructors still execute. Snapshot values, ignored state and
+constructor transformations mean that exact object identity or equality after a
+round trip is not guaranteed.
 
 ## Diagnostics
 

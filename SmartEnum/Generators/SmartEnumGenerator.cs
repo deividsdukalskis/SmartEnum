@@ -45,6 +45,7 @@ public sealed partial class SmartEnumGenerator : IIncrementalGenerator
 				members = members.Where(type => GetPath(type, root.Type).All(ancestor => valid.ContainsKey(ancestor.OriginalDefinition))).ToArray();
 				if (!ValidateGeneration(output, compilation, root.Type, members, attribute)) continue;
 				INamedTypeSymbol[] mappedMembers = members.Select(type => MapToRoot(type, root.Type)!).ToArray();
+				output.AddSource("Flattened." + GetHintName(root.Type), GenerateFlattenedModel(root.Type, mappedMembers, attribute));
 				foreach (INamedTypeSymbol? type in members)
 				{
 					output.CancellationToken.ThrowIfCancellationRequested();
@@ -54,7 +55,7 @@ public sealed partial class SmartEnumGenerator : IIncrementalGenerator
 						ValidatedHierarchyData.DerivedConcreteTypeData => GenerateDerivedConcreteClass(type, root.Type),
 						_ => GenerateDerivedAbstractClass(type, root.Type)
 					};
-					output.AddSource(GetHintName(type), WrapType(type, body));
+					output.AddSource(GetHintName(type), WrapType(type, body + "\n\n" + GenerateFlattenWriter(type, root.Type, mappedMembers, attribute, compilation)));
 				}
 			}
 		});

@@ -9,7 +9,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root<T> { public T Value { get; } }
 			public partial class Leaf<U> : Root<U> { public const int Id = 1; public U[] Values { get; init; } }
 			public static class RegressionProbe { public static void Verify() {
-			 var item = Root<string>.MapDataToTypeUnvalidated(1, "one", new[] { "two" });
+			 var item = Root<string>.MapFromFlattenedDataUnvalidated(new RootFlattened<string> { Id = 1, Value = "one", Values = new[] { "two" } });
 			 if (item is not Leaf<string> leaf || leaf.Value != "one" || leaf.Values[0] != "two") throw new System.Exception();
 			} }
 			"""),
@@ -18,7 +18,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root<T, U> { public T First { get; } public U Second { get; } }
 			public partial class Leaf<A, B> : Root<B, A> { public const int Id = 1; public A Third { get; } }
 			public static class RegressionProbe { public static void Verify() {
-			 var item = Root<string, int>.MapDataToTypeUnvalidated(1, "one", 2, 3);
+			 var item = Root<string, int>.MapFromFlattenedDataUnvalidated(new RootFlattened<string, int> { Id = 1, First = "one", Second = 2, Third = 3 });
 			 if (item is not Leaf<int, string> leaf || leaf.Third != 3) throw new System.Exception();
 			} }
 			"""),
@@ -59,7 +59,7 @@ internal static class RegressionCases
 			 public partial class Leaf : Root { public const int Id = 1; }
 			}
 			public static class RegressionProbe { public static void Verify() {
-			 if (Container<string>.Root.MapDataToTypeUnvalidated(1, "x") is not Container<string>.Leaf { Value: "x" }) throw new System.Exception();
+			 if (Container<string>.Root.MapFromFlattenedDataUnvalidated(new Container<string>.RootFlattened { Id = 1, Value = "x" }) is not Container<string>.Leaf { Value: "x" }) throw new System.Exception();
 			} }
 			"""),
 		new("record hierarchy runtime", """
@@ -69,7 +69,7 @@ internal static class RegressionCases
 			public static class RegressionProbe { public static void Verify() {
 			 var leaf = Leaf.ConstructUnvalidated("x", 2);
 			 if (leaf != Leaf.ConstructUnvalidated("x", 2) || leaf with { Count = 3 } is not { Count: 3 }) throw new System.Exception();
-			 if (Root.MapDataToTypeUnvalidated(1, "x", 2) != leaf) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "x", Count = 2 }) != leaf) throw new System.Exception();
 			} }
 			"""),
 		new("nested readonly struct container", """
@@ -94,7 +94,7 @@ internal static class RegressionCases
 			public partial class Leaf : Root { public const int Id = 1; public override string Name { get; } }
 			public partial class Other : Root { public const int Id = 2; public override string Name { get; } }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapDataToTypeUnvalidated(2, "other") is not Other { Name: "other" }) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 2, Name = "other" }) is not Other { Name: "other" }) throw new System.Exception();
 			} }
 			"""),
 		new("required abstract property override", """
@@ -130,7 +130,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root : Entity { public int Count { get; } }
 			public partial class Leaf : Root { public const int Id = 1; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapDataToTypeUnvalidated(1, "token", 3) is not Leaf { Token: "token", Count: 3 }) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, base_token = "token", Count = 3 }) is not Leaf { Token: "token", Count: 3 }) throw new System.Exception();
 			} }
 			"""),
 		new("external required initialization", """
@@ -147,7 +147,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root { public int Id { get; } }
 			public partial class Leaf : Root { public new const int Id = 1; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapDataToTypeUnvalidated(key_Id: 1, Id: 42).Id != 42) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { key_Id = 1, Id = 42 }).Id != 42) throw new System.Exception();
 			} }
 			"""),
 		new("private data type exposure diagnosed", """
@@ -181,7 +181,7 @@ internal static class RegressionCases
 			[SmartEnum<double>("Id")] public abstract partial class Root { }
 			public partial class Leaf : Root { public const double Id = double.NaN; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapDataToTypeUnvalidated(double.NaN) is not Leaf) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = double.NaN }) is not Leaf) throw new System.Exception();
 			} }
 			"""),
 		new("NaN duplicate key diagnosed", """
@@ -195,14 +195,14 @@ internal static class RegressionCases
 			[SmartEnum<string>("Id")] public abstract partial class Root { }
 			public partial class Leaf : Root { public const string Id = null!; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapDataToTypeUnvalidated(null!) is not Leaf) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = null! }) is not Leaf) throw new System.Exception();
 			} }
 			"""),
 		new("empty root mapper rejects unknown", """
 			using SmartEnum;
 			[SmartEnum<int>("Id")] public abstract partial class Root { }
 			public static class RegressionProbe { public static void Verify() {
-			 try { Root.MapDataToTypeUnvalidated(1); } catch (System.ArgumentException) { return; }
+			 try { Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1 }); } catch (System.ArgumentException) { return; }
 			 throw new System.Exception();
 			} }
 			"""),

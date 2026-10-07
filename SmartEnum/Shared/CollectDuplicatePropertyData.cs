@@ -36,6 +36,7 @@ public class DuplicatePropertyData
 		{
 			IEnumerable<IGrouping<string, IPropertySymbol>> groups = hierarchy.Value.SelectMany(type => type.GetMembers().OfType<IPropertySymbol>())
 				.Where(property => !property.IsStatic && !property.IsIndexer && !property.IsImplicitlyDeclared && property.ExplicitInterfaceImplementations.IsEmpty)
+				.Where(property => !property.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == "SmartEnum.SmartEnumIgnoreAttribute"))
 				.GroupBy(property => property.Name);
 			foreach (IGrouping<string, IPropertySymbol> group in groups)
 			{

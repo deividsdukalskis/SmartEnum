@@ -41,7 +41,7 @@ internal static class LifecycleChecks
 			ImmutableArray<Diagnostic> analysis = await result.WithAnalyzers([analyzer]).GetAnalyzerDiagnosticsAsync();
 			if (errors.Concat(analysis).Concat(result.GetDiagnostics()).Any(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error))
 				throw new Exception("Concurrent generator/analyzer use failed.");
-			if (concurrentDriver.GetRunResult().Results[1].GeneratedSources.Length != 2)
+			if (concurrentDriver.GetRunResult().Results[1].GeneratedSources.Length != 3)
 				throw new Exception("Concurrent generation lost output.");
 		})));
 		Console.WriteLine("PASS incremental edits, reverts, and eight concurrent compilations");

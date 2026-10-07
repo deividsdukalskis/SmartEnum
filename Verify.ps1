@@ -47,8 +47,11 @@ try {
     @'
 using SmartEnum;
 
-if (Root.MapDataToTypeUnvalidated(1, "package") is not Leaf { Name: "package" })
+if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "package" }) is not Leaf { Name: "package" })
     throw new System.Exception("Packaged generator did not initialize the consumer correctly.");
+RootFlattened flattened = Leaf.ConstructUnvalidated("round trip").Flatten();
+if (flattened.Id != 1 || Root.MapFromFlattenedDataUnvalidated(flattened).Name != "round trip")
+    throw new System.Exception("Packaged generator did not round trip flattened data correctly.");
 System.Console.WriteLine("PASS isolated NuGet consumer");
 
 [SmartEnum<int>("Id")]

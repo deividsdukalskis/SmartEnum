@@ -78,8 +78,8 @@ using SmartEnum;
 [SmartEnum<int>("Id")] public abstract partial class Root { public string Name { get; } }
 public partial class Leaf : Root { public const int Id = 1; public int Number { get; private set; } }
 """;
-await Check("single key, global namespace, get-only and private setters", simple, generatedTypes: 2);
-await Check("partial declarations are deduplicated", simple + "\npublic partial class Leaf { }", generatedTypes: 2);
+await Check("single key, global namespace, get-only and private setters", simple, generatedTypes: 3);
+await Check("partial declarations are deduplicated", simple + "\npublic partial class Leaf { }", generatedTypes: 3);
 await Check("nullable, init, required, escaped identifiers and computed properties", """
 using SmartEnum;
 [SmartEnum<string>("Kind")] public abstract partial class Root { public required string @event { get; init; } }
@@ -90,7 +90,7 @@ public partial class Leaf : Root {
  public static int Static { get; set; }
  public int this[int index] => index;
 }
-""", generatedTypes: 2);
+""", generatedTypes: 3);
 await Check("nested partial classes", """
 using SmartEnum;
 namespace Example;
@@ -98,13 +98,13 @@ public static partial class Container {
  [SmartEnum<int>("Id")] public abstract partial class Root { }
  public partial class Leaf : Root { public const int Id = 1; }
 }
-""", generatedTypes: 2);
+""", generatedTypes: 3);
 await Check("non-SmartEnum ancestor does not consume a key level", """
 using SmartEnum;
 public abstract class Entity { protected Entity() { } }
 [SmartEnum<int>("Id")] public abstract partial class Root : Entity { }
 public partial class Leaf : Root { public const int Id = 1; }
-""", generatedTypes: 2);
+""", generatedTypes: 3);
 await Check("three key levels", """
 using SmartEnum;
 [SmartEnum<int>("A")][SmartEnum<string>("B")][SmartEnum<char>("C")]
@@ -112,7 +112,7 @@ public abstract partial class Root { }
 public abstract partial class Middle : Root { public const int A = 1; }
 public abstract partial class Middle2 : Middle { public const string B = "two"; }
 public partial class Leaf : Middle2 { public const char C = '3'; }
-""", generatedTypes: 4);
+""", generatedTypes: 5);
 await Check("no hierarchy", "public class Ordinary { }", generatedTypes: 0);
 await Check("non-abstract root", simple.Replace("abstract partial class Root", "partial class Root"), "SMARTENUM001");
 await Check("non-partial leaf", simple.Replace("partial class Leaf", "class Leaf"), "SMARTENUM002");
@@ -132,7 +132,7 @@ await Check("generic root", """
 using SmartEnum;
 [SmartEnum<int>("Id")] public abstract partial class Root<T> { }
 public partial class Leaf<T> : Root<T> { public const int Id = 1; }
-""", generatedTypes: 2);
+""", generatedTypes: 3);
 await Check("existing constructor conflict", simple.Replace("public const int Id", "public Leaf(string Name, int Number) : base(Name) { this.Number = Number; } public const int Id"), "SMARTENUM012");
 await Check("ambiguous full keys", simple + "\npublic partial class Other : Root { public const int Id = 1; }", "SMARTENUM013");
 await Check("too many inheritance levels", simple + "\npublic partial class TooDeep : Leaf { }", "SMARTENUM014");
@@ -150,14 +150,14 @@ public enum Code { One }
 [SmartEnum<Code>("A")][SmartEnum<string>("B")] public abstract partial class Root { }
 public abstract partial class Middle : Root { public const Code A = Code.One; }
 public partial class Leaf : Middle { public const string B = null!; }
-""", generatedTypes: 3);
+""", generatedTypes: 4);
 await Check("same class name in separate namespaces", """
 using SmartEnum;
 namespace One { [SmartEnum<int>("Id")] public abstract partial class Root { }
 public partial class Leaf : Root { public const int Id = 1; } }
 namespace Two { [SmartEnum<int>("Id")] public abstract partial class Root { }
 public partial class Leaf : Root { public const int Id = 2; } }
-""", generatedTypes: 4);
-foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
+""", generatedTypes: 6);
+foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
 await LifecycleChecks.RunAsync(references);
 Console.WriteLine($"All {passed} generator/analyzer regression cases and lifecycle checks passed.");

@@ -20,7 +20,7 @@ internal static class PrivateFieldCases
 				public static class RegressionProbe { public static void Verify() {
 				 Leaf direct = Leaf.ConstructUnvalidated(Label: "direct", _count: 42, _name: "Alice", _note: null);
 				 if (!direct.Matches("Alice", 42, null) || direct.Label != "direct") throw new System.Exception();
-				 Root mapped = Root.MapDataToTypeUnvalidated(Id: 1, Label: "mapped", _count: 10, _name: "Bob", _note: "note");
+				 Root mapped = Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Label = "mapped", _count = 10, _name = "Bob", _note = "note" });
 				 if (mapped is not Leaf leaf || !leaf.Matches("Bob", 10, "note")) throw new System.Exception();
 				 if (!typeof(Leaf).GetField("_name", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.IsPrivate) throw new System.Exception();
 				} }
@@ -45,7 +45,7 @@ internal static class PrivateFieldCases
 				public static class RegressionProbe { public static void Verify() {
 				 Leaf direct = Leaf.ConstructUnvalidated(_rootName: "direct", _middleNumber: 3, _leafFlag: true);
 				 if (direct.RootName != "direct" || direct.MiddleNumber != 3 || !direct.LeafFlag) throw new System.Exception();
-				 if (Root.MapDataToTypeUnvalidated(Id: 1, SubtypeId: 2, _rootName: "mapped", _middleNumber: 4, _leafFlag: true)
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, SubtypeId = 2, _rootName = "mapped", _middleNumber = 4, _leafFlag = true })
 				  is not Leaf { RootName: "mapped", MiddleNumber: 4, LeafFlag: true }) throw new System.Exception();
 				} }
 				""");
@@ -61,7 +61,7 @@ internal static class PrivateFieldCases
 				 public U LeafValue => _leafValue;
 				}
 				public static class RegressionProbe { public static void Verify() {
-				 if (Root<string>.MapDataToTypeUnvalidated(Id: 1, _rootValue: "root", _leafValue: "leaf")
+				 if (Root<string>.MapFromFlattenedDataUnvalidated(new RootFlattened<string> { Id = 1, _rootValue = "root", _leafValue = "leaf" })
 				  is not Leaf<string> { RootValue: "root", LeafValue: "leaf" }) throw new System.Exception();
 				} }
 				""");
@@ -87,7 +87,7 @@ internal static class PrivateFieldCases
 				}
 				public static class RegressionProbe { public static void Verify() {
 				 if (Leaf.ConstructUnvalidated(@event: "value").Value != "value") throw new System.Exception();
-				 if (Root.MapDataToTypeUnvalidated(Id: 1, @event: null) is not Leaf { Value: null }) throw new System.Exception();
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, @event = null }) is not Leaf { Value: null }) throw new System.Exception();
 				} }
 				""");
 			yield return new("existing private field constructor reused", """

@@ -46,6 +46,7 @@ public sealed partial class SmartEnumGenerator
 	}
 
 	private static DataMember[] GetOwnData(INamedTypeSymbol type) => type.GetMembers()
+		.Where(member => !HasDataAttribute(member, "SmartEnumIgnoreAttribute"))
 		.Select(member => member switch
 		{
 			IPropertySymbol property when !property.IsStatic && !property.IsIndexer && !property.IsAbstract
@@ -59,6 +60,8 @@ public sealed partial class SmartEnumGenerator
 				=> new DataMember(field.Name, field.Type, field),
 			_ => null
 		}).OfType<DataMember>().OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
+
+	private static bool HasDataAttribute(ISymbol member, string name) => member.GetAttributes().Any(attribute => attribute.AttributeClass?.ToDisplayString() == "SmartEnum." + name);
 
 	private static IMethodSymbol? GetExternalConstructor(INamedTypeSymbol root)
 	{
@@ -138,9 +141,12 @@ public sealed partial class SmartEnumGenerator
 	}
 
 	private static string WrapType(INamedTypeSymbol type, string body)
+		=> WrapDeclaration(type, Declaration(type), body);
+
+	private static string WrapDeclaration(INamedTypeSymbol type, string declaration, string body)
 	{
 		string source = $$"""
-			{{Declaration(type)}}
+			{{declaration}}
 			{
 				{{Indent(body)}}
 			}
