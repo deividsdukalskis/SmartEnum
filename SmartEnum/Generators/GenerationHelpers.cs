@@ -54,7 +54,8 @@ public sealed partial class SmartEnumGenerator
 					reference.GetSyntax() is PropertyDeclarationSyntax { AccessorList: { } list }
 					&& list.Accessors.All(accessor => accessor.Body is null && accessor.ExpressionBody is null)))
 				=> new DataMember(property.Name, property.Type, property),
-			IFieldSymbol field when !field.IsStatic && !field.IsConst && !field.IsImplicitlyDeclared && field.DeclaredAccessibility == Accessibility.Public
+			IFieldSymbol field when !field.IsStatic && !field.IsConst && !field.IsImplicitlyDeclared
+				&& field.DeclaredAccessibility is Accessibility.Public or Accessibility.Private
 				=> new DataMember(field.Name, field.Type, field),
 			_ => null
 		}).OfType<DataMember>().OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
@@ -105,7 +106,9 @@ public sealed partial class SmartEnumGenerator
 		DataMember[] parentData = SameDefinition(type, root) ? GetExternalData(type) : GetData(type.BaseType!, root);
 		string initializer = SameDefinition(type, root) && type.BaseType?.SpecialType == SpecialType.System_Object
 			? string.Empty : $" : base({Arguments(parentData)})";
-		IEnumerable<string> assignments = GetOwnData(type).Select(member => $"this.{Identifier(member.Name)} = {Identifier(member.Name)};");
+		// Setters may modify backing fields. Apply explicit field values last so they are preserved.
+		IEnumerable<string> assignments = GetOwnData(type).OrderBy(member => member.Symbol is IFieldSymbol)
+			.Select(member => $"this.{Identifier(member.Name)} = {Identifier(member.Name)};");
 		return $$"""
 			{{required}}
 			{{accessibility}} {{Identifier(type.Name)}}({{string.Join(", ", data.Select(Parameter))}}){{initializer}}

@@ -18,7 +18,7 @@ internal static class EdgeCases
 				 if (Root.MapDataToTypeUnvalidated(1, 2, 42).Id != 42) throw new System.Exception();
 				} }
 				""");
-			yield return new("private backing fields stay implementation details", """
+			yield return new("explicit private backing field values are preserved", """
 				using SmartEnum;
 				[SmartEnum<int>("Id")] public abstract partial class Root {
 				 private string text = "";
@@ -26,7 +26,8 @@ internal static class EdgeCases
 				}
 				public partial class Leaf : Root { public const int Id = 1; }
 				public static class RegressionProbe { public static void Verify() {
-				 if (Leaf.ConstructUnvalidated("text").Name != "TEXT") throw new System.Exception();
+				 if (Leaf.ConstructUnvalidated(Name: "text", text: "stored").Name != "stored") throw new System.Exception();
+				 if (Root.MapDataToTypeUnvalidated(Id: 1, Name: "text", text: "mapped").Name != "mapped") throw new System.Exception();
 				} }
 				""");
 			yield return new("internal branch cannot expose internal mapper data", """

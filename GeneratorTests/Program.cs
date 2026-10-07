@@ -158,6 +158,6 @@ public partial class Leaf : Root { public const int Id = 1; } }
 namespace Two { [SmartEnum<int>("Id")] public abstract partial class Root { }
 public partial class Leaf : Root { public const int Id = 2; } }
 """, generatedTypes: 4);
-foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
+foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
 await LifecycleChecks.RunAsync(references);
 Console.WriteLine($"All {passed} generator/analyzer regression cases and lifecycle checks passed.");

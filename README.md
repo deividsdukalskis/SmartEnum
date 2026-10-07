@@ -44,14 +44,28 @@ Constructors accept data from the root down to the concrete type, alphabetized
 within each declaring type. Each generated constructor initializes its own data
 and forwards inherited data to its parent. Data consists of concrete instance
 properties with a setter/init accessor or an auto getter, plus explicit public
-instance fields. Private backing fields, static members, constants, computed
-getter-only properties, indexers and explicit interface properties are not data.
+and private instance fields. Static members, constants, compiler-generated backing
+fields, computed getter-only properties, indexers and explicit interface properties
+are not data.
 
 Supported data includes private setters, getter-only auto properties, `init`,
-nullable annotations, public readonly fields and required properties/fields.
+nullable annotations, public/private readonly fields and required properties/fields.
 Abstract property contracts are initialized by their concrete overrides. Property
 names must be unique throughout the hierarchy except for overrides of the same
 contract. Multiple incompatible data types under one name are diagnosed.
+
+Private fields retain their visibility and use their declared names as parameters
+in constructors, `ConstructUnvalidated` and `MapDataToTypeUnvalidated`. Inherited
+private fields are initialized by the constructor of their declaring class.
+Field types must be accessible to the generated public factories, and duplicate
+data names within an inheritance path are diagnosed. This adds required parameters
+for existing private fields, so update factory calls when upgrading.
+
+If a writable property and its explicit backing field are both present, both
+become parameters. Constructors assign properties first and explicit fields last
+within each class, preserving the supplied field values even when a setter writes
+to those fields. Compiler-generated auto-property backing fields are never exposed
+as separate parameters.
 
 The mapper accepts keys in attribute order, followed by the union of hierarchy
 data. **Use named arguments**: ordering across branches is deterministic, but
