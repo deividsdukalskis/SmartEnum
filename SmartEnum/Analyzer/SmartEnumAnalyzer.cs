@@ -34,6 +34,7 @@ public sealed partial class SmartEnumAnalyzer : DiagnosticAnalyzer
 			compilationContext.RegisterSymbolAction((context) =>
 			{
 				INamedTypeSymbol type = (INamedTypeSymbol)context.Symbol;
+				if (StrategyContract.IsExplicit(type)) return;
 				Result<HierarchyData, HierarchyError> hierarchyData = HierarchyData.Collect(type, attributeDefinition);
 				Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> validationResult = ValidatedHierarchyData.Validate(hierarchyData, duplicateProperties);
 				if (validationResult is Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>> failure)

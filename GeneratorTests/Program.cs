@@ -37,7 +37,7 @@ async Task Check(string name, string source, string? expectedDiagnostic = null, 
 		if (!emit.Success) throw new Exception(name + ": emit failed: " + string.Join("\n", emit.Diagnostics));
 		Diagnostic[] generatedWarnings = [.. output.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Warning
 			&& diagnostic.Location.SourceTree?.FilePath.EndsWith(".g.cs", StringComparison.Ordinal) == true)];
-		if (generatedWarnings.Length > 0) throw new Exception(name + ": generated warnings: " + string.Join("\n", generatedWarnings.AsEnumerable()));
+		if (generatedWarnings.Length > 0) throw new Exception(name + ": generated warnings: " + string.Join("\n", generatedWarnings.Select(warning => warning + "\n" + warning.Location.SourceTree!.GetText().Lines[warning.Location.GetLineSpan().StartLinePosition.Line].ToString())));
 		AssemblyLoadContext loadContext = new(name, isCollectible: true);
 		try
 		{
@@ -158,7 +158,7 @@ public partial class Leaf : Root { public const int Id = 1; } }
 namespace Two { [SmartEnum<int>("Id")] public abstract partial class Root { }
 public partial class Leaf : Root { public const int Id = 2; } }
 """, generatedTypes: 6);
-foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All).Concat(FlattenedNamingCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
+foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All).Concat(FlattenedNamingCases.All).Concat(SeparateCases.All).Concat(CompositeCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
 System.Globalization.CultureInfo originalCulture = System.Globalization.CultureInfo.CurrentCulture;
 try
 {

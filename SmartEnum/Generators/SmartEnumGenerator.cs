@@ -22,6 +22,7 @@ public sealed partial class SmartEnumGenerator : IIncrementalGenerator
 			(Compilation? compilation, ImmutableArray<INamedTypeSymbol> symbols) = input;
 			INamedTypeSymbol? attribute = compilation.GetTypeByMetadataName("SmartEnum.SmartEnumAttribute`1");
 			if (attribute is null) return;
+			GenerateStrategyHierarchies(output, compilation, symbols, attribute);
 
 			Lazy<ImmutableArray<DuplicatePropertyData>> duplicates = new(() => DuplicatePropertyData.Collect(compilation, attribute, output.CancellationToken));
 			HashSet<ISymbol> seen = new(SymbolEqualityComparer.Default);
@@ -29,6 +30,7 @@ public sealed partial class SmartEnumGenerator : IIncrementalGenerator
 			foreach (INamedTypeSymbol? type in symbols)
 			{
 				output.CancellationToken.ThrowIfCancellationRequested();
+				if (StrategyContract.IsExplicit(type)) continue;
 				if (seen.Add(type) && ValidatedHierarchyData.Validate(HierarchyData.Collect(type, attribute), duplicates)
 					is Success<ValidatedHierarchyData, ImmutableArray<HierarchyError>> success)
 				{

@@ -18,3 +18,5 @@ SMARTENUM011 | SmartEnum | Error | Data property names must be unique apart from
 SMARTENUM012 | SmartEnum | Error | Declaration cannot be generated safely
 SMARTENUM013 | SmartEnum | Error | Complete key combinations must be unique
 SMARTENUM014 | SmartEnum | Error | Hierarchy depth must match the key levels
+SMARTENUM015 | SmartEnum | Error | Invalid explicit flattening contract
+SMARTENUM016 | SmartEnum | Warning | Ambiguous flattened foreign key name
