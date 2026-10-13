@@ -32,8 +32,8 @@ public sealed partial class SmartEnumGenerator
 
 	private static string FlattenedArgument(DataMember data, INamedTypeSymbol root, INamedTypeSymbol[] members)
 	{
-		string expression = "data." + Identifier(data.Name);
-		string missing = $"throw new global::System.ArgumentException(\"The selected SmartEnum type requires '{data.Name}'.\", nameof(data))";
+		string expression = "data." + FlattenedIdentifier(data.Name);
+		string missing = $"throw new global::System.ArgumentException(\"The selected SmartEnum type requires '{FlattenedName(data.Name)}'.\", nameof(data))";
 		if (NeedsOptionalValue(data, root, members)) expression = $"({expression} ?? {missing}).Value";
 		else if (IsBranchSpecific(data, root, members) && data.Type.IsValueType && !IsNullableValue(data.Type)) return expression + " ?? " + missing;
 		return !data.Type.IsValueType && data.Type.NullableAnnotation == NullableAnnotation.NotAnnotated
@@ -50,12 +50,12 @@ public sealed partial class SmartEnumGenerator
 
 	private static string GenerateTransferProperty(string type, string name, int index)
 		=> $$"""
-			private {{type}} __SmartEnumValue{{index}} = default!;
-			internal bool __SmartEnumHas{{index}} { get; private set; }
+			private {{type}} SmartEnumValue{{index}} = default!;
+			internal bool SmartEnumHas{{index}} { get; private set; }
 			public {{type}} {{name}}
 			{
-				get => this.__SmartEnumValue{{index}};
-				set { this.__SmartEnumValue{{index}} = value; this.__SmartEnumHas{{index}} = true; }
+				get => this.SmartEnumValue{{index}};
+				set { this.SmartEnumValue{{index}} = value; this.SmartEnumHas{{index}} = true; }
 			}
 			""";
 
@@ -63,9 +63,9 @@ public sealed partial class SmartEnumGenerator
 	{
 		AttributeData[] keys = GetAttributes(root, attribute);
 		DataMember[] data = GetFlattenedMembers(root, members);
-		string[] keyNames = GetKeyParameters(keys, data);
+		string[] keyNames = GetFlattenedKeyNames(keys, data);
 		IEnumerable<string> properties = keys.Select((key, index) => GenerateTransferProperty(TypeName(key.AttributeClass!.TypeArguments[0]), keyNames[index], index))
-			.Concat(data.Select((member, index) => GenerateTransferProperty(FlattenedPropertyType(member, root, members), Identifier(member.Name), keys.Length + index)));
+			.Concat(data.Select((member, index) => GenerateTransferProperty(FlattenedPropertyType(member, root, members), FlattenedIdentifier(member.Name), keys.Length + index)));
 		string accessibility = root.DeclaredAccessibility switch
 		{
 			Accessibility.Public => "public",
@@ -117,7 +117,7 @@ public sealed partial class SmartEnumGenerator
 			{
 				ISymbol readable = GetExternalReadableMember(type, member, compilation)!;
 				string receiver = SameDefinition(readable.ContainingType, type) ? "this" : "base";
-				assignments.Add($"data.{Identifier(member.Name)} = {receiver}.{Identifier(readable.Name)};");
+				assignments.Add($"data.{FlattenedIdentifier(member.Name)} = {receiver}.{Identifier(readable.Name)};");
 			}
 		}
 		else
@@ -126,7 +126,7 @@ public sealed partial class SmartEnumGenerator
 			AttributeData[] keys = GetAttributes(root, attribute);
 			DataMember[] data = GetFlattenedMembers(root, members);
 			int keyIndex = path.Count - 2;
-			assignments.Add($"data.{GetKeyParameters(keys, data)[keyIndex]} = {TypeName(type)}.{Identifier((string)keys[keyIndex].ConstructorArguments[0].Value!)};");
+			assignments.Add($"data.{GetFlattenedKeyNames(keys, data)[keyIndex]} = {TypeName(type)}.{Identifier((string)keys[keyIndex].ConstructorArguments[0].Value!)};");
 		}
 
 		assignments.AddRange(GetOwnData(type).Concat(GetOwnSnapshots(type)).Select(member =>
@@ -134,7 +134,7 @@ public sealed partial class SmartEnumGenerator
 			DataMember mapped = GetFlattenedMembers(root, members).First(candidate => candidate.Name == member.Name);
 			string value = "this." + Identifier(member.Name);
 			if (NeedsOptionalValue(mapped, root, members)) value = $"new {FlattenedTypeName(path[0])}.OptionalValue<{TypeName(member.Type)}>({value})";
-			return $"data.{Identifier(member.Name)} = {value};";
+			return $"data.{FlattenedIdentifier(member.Name)} = {value};";
 		}));
 		return $$"""
 			protected {{(isRoot ? "virtual" : "override")}} void __SmartEnumWriteFlattenedData({{FlattenedTypeName(path[0])}} data)

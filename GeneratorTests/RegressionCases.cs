@@ -130,7 +130,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root : Entity { public int Count { get; } }
 			public partial class Leaf : Root { public const int Id = 1; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, base_token = "token", Count = 3 }) is not Leaf { Token: "token", Count: 3 }) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, BaseToken = "token", Count = 3 }) is not Leaf { Token: "token", Count: 3 }) throw new System.Exception();
 			} }
 			"""),
 		new("external required initialization", """
@@ -147,7 +147,7 @@ internal static class RegressionCases
 			[SmartEnum<int>("Id")] public abstract partial class Root { public int Id { get; } }
 			public partial class Leaf : Root { public new const int Id = 1; }
 			public static class RegressionProbe { public static void Verify() {
-			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { key_Id = 1, Id = 42 }).Id != 42) throw new System.Exception();
+			 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { KeyId = 1, Id = 42 }).Id != 42) throw new System.Exception();
 			} }
 			"""),
 		new("private data type exposure diagnosed", """

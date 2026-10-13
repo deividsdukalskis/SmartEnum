@@ -18,10 +18,10 @@ public sealed partial class SmartEnumGenerator
 		}
 
 		string[] keyParameters = GetKeyParameters(keys, data);
-		string[] keyProperties = GetKeyParameters(keys, GetFlattenedMembers(root, members));
+		string[] keyProperties = GetFlattenedKeyNames(keys, GetFlattenedMembers(root, members));
 		IEnumerable<string> parameters = keys.Select((key, index) => TypeName(key.AttributeClass!.TypeArguments[0]) + " " + keyParameters[index]).Concat(data.Select(Parameter));
 		IEnumerable<string> assignments = keys.Select((key, index) => keyProperties[index] + " = " + keyParameters[index])
-			.Concat(data.Select(member => Identifier(member.Name) + " = " + (NeedsOptionalValue(member, root, members)
+			.Concat(data.Select(member => FlattenedIdentifier(member.Name) + " = " + (NeedsOptionalValue(member, root, members)
 				? $"new {FlattenedTypeName(root)}.OptionalValue<{TypeName(member.Type)}>({Identifier(member.Name)})" : Identifier(member.Name))));
 		return $$"""
 			/// <summary>

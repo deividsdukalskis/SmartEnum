@@ -10,8 +10,8 @@ public sealed partial class SmartEnumGenerator
 	{
 		AttributeData[] keys = GetAttributes(type, attribute);
 		DataMember[] data = GetFlattenedMembers(type, members);
-		string[] keyParameters = GetKeyParameters(keys, data);
-		IEnumerable<string> keyPresence = keys.Select((key, index) => $"if (!data.__SmartEnumHas{index}) throw new global::System.ArgumentException(\"Discriminator '{keyParameters[index].Substring(1)}' was not supplied.\", nameof(data));");
+		string[] keyParameters = GetFlattenedKeyNames(keys, data);
+		IEnumerable<string> keyPresence = keys.Select((key, index) => $"if (!data.SmartEnumHas{index}) throw new global::System.ArgumentException(\"Discriminator '{keyParameters[index].Substring(1)}' was not supplied.\", nameof(data));");
 		IEnumerable<string> branches = members.Where(member => !member.IsAbstract).Select(concrete =>
 		{
 			List<INamedTypeSymbol> path = GetPath(concrete, type);
@@ -20,10 +20,10 @@ public sealed partial class SmartEnumGenerator
 			HashSet<string> selected = new(GetData(concrete, type).Select(member => member.Name));
 			IEnumerable<string> presenceChecks = data.Select((member, index) => (member, index)).Where(item => selected.Contains(item.member.Name)
 				&& item.member.Type.NullableAnnotation != NullableAnnotation.Annotated && !IsNullableValue(item.member.Type))
-				.Select(item => $"if (!data.__SmartEnumHas{keys.Length + item.index}) throw new global::System.ArgumentException(\"Property '{item.member.Name}' was not supplied.\", nameof(data));");
+				.Select(item => $"if (!data.SmartEnumHas{keys.Length + item.index}) throw new global::System.ArgumentException(\"Property '{FlattenedName(item.member.Name)}' was not supplied.\", nameof(data));");
 			IEnumerable<string> unusedChecks = members.SelectMany(member => GetData(member, type)).GroupBy(member => member.Name).Select(group => group.First())
 				.Where(member => !selected.Contains(member.Name)).Select(member =>
-					$"if (rejectUnusedData && data.{Identifier(member.Name)} is not null) throw new global::System.ArgumentException(\"Property '{member.Name}' does not belong to the selected SmartEnum type.\", nameof(data));");
+					$"if (rejectUnusedData && data.{FlattenedIdentifier(member.Name)} is not null) throw new global::System.ArgumentException(\"Property '{FlattenedName(member.Name)}' does not belong to the selected SmartEnum type.\", nameof(data));");
 			return $$"""
 				if ({{string.Join(" && ", conditions)}})
 				{

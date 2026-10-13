@@ -13,12 +13,12 @@ internal static class FlattenedCases
 				public static class RegressionProbe { public static void Verify() {
 				 Root item = Leaf.ConstructUnvalidated("name", 0, false);
 				 RootFlattened flat = item.Flatten();
-				 if (flat.Kind != 1 || flat.Variant != "same" || flat._name != "name" || flat.Count != 0 || flat._flag != false || flat.Note is not null || flat.Time is not null) throw new System.Exception();
+				 if (flat.Kind != 1 || flat.Variant != "same" || flat.Name != "name" || flat.Count != 0 || flat.Flag != false || flat.Note is not null || flat.Time is not null) throw new System.Exception();
 				 if (Root.MapFromFlattenedDataUnvalidated(flat) is not Leaf { Name: "name", Count: 0, Flag: false }) throw new System.Exception();
 				 var other = Other.ConstructUnvalidated("other", null, new System.DateTime(2026, 1, 2)).Flatten();
-				 if (other.Kind != 2 || other.Count is not null || other._flag is not null || other.Time is null) throw new System.Exception();
+				 if (other.Kind != 2 || other.Count is not null || other.Flag is not null || other.Time is null) throw new System.Exception();
 				 if (Root.MapFromFlattenedDataUnvalidated(other) is not Other { Name: "other", Note: null }) throw new System.Exception();
-				 if (typeof(RootFlattened).GetProperty("Count")!.PropertyType != typeof(int?) || typeof(RootFlattened).GetProperty("_flag")!.PropertyType != typeof(bool?)) throw new System.Exception();
+				 if (typeof(RootFlattened).GetProperty("Count")!.PropertyType != typeof(int?) || typeof(RootFlattened).GetProperty("Flag")!.PropertyType != typeof(bool?)) throw new System.Exception();
 				 if (Root.MapDataToTypeUnvalidated(1, "same", "legacy", 0, false, null, default) is not Leaf) throw new System.Exception();
 				 flat.Count = 8;
 				 if (((Leaf)item).Count != 0 || item.Flatten().Count != 0) throw new System.Exception();
@@ -63,11 +63,11 @@ internal static class FlattenedCases
 			new("flattened record required data and custom setter state", """
 				using SmartEnum;
 				[SmartEnum<int>("Id")] public abstract partial record Root { public required string Name { get; init; } }
-				public sealed partial record Leaf : Root { public const int Id = 1; private string _text = ""; public string Text { get => _text; set => _text = value.ToUpperInvariant(); } }
+				public sealed partial record Leaf : Root { public const int Id = 1; private string _rawText = ""; public string Text { get => _rawText; set => _rawText = value.ToUpperInvariant(); } }
 				public static class RegressionProbe { public static void Verify() {
 				 var leaf = Leaf.ConstructUnvalidated("name", "setter", "raw");
 				 var flat = leaf.Flatten();
-				 if (flat.Text != "raw" || flat._text != "raw" || Root.MapFromFlattenedDataUnvalidated(flat) != leaf) throw new System.Exception();
+				 if (flat.Text != "raw" || flat.RawText != "raw" || Root.MapFromFlattenedDataUnvalidated(flat) != leaf) throw new System.Exception();
 				} }
 				"""),
 			new("flattened virtual property overrides and key collision", """
@@ -76,7 +76,7 @@ internal static class FlattenedCases
 				public partial class Leaf : Root { public new const int Id = 1; public override string Value { get; } }
 				public static class RegressionProbe { public static void Verify() {
 				 var flat = Leaf.ConstructUnvalidated(42, "value").Flatten();
-				 if (flat.Id != 42 || flat.key_Id != 1 || flat.Value != "value") throw new System.Exception();
+				 if (flat.Id != 42 || flat.KeyId != 1 || flat.Value != "value") throw new System.Exception();
 				 if (Root.MapFromFlattenedDataUnvalidated(flat).Id != 42) throw new System.Exception();
 				} }
 				"""),
@@ -87,7 +87,7 @@ internal static class FlattenedCases
 				public partial class Leaf : Root { public const int Id = 1; }
 				public static class RegressionProbe { public static void Verify() {
 				 var leaf = Leaf.ConstructUnvalidated("original"); leaf.Token = "current";
-				 if (leaf.Flatten().base_token != "current" || Root.MapFromFlattenedDataUnvalidated(leaf.Flatten()).Token != "current") throw new System.Exception();
+				 if (leaf.Flatten().BaseToken != "current" || Root.MapFromFlattenedDataUnvalidated(leaf.Flatten()).Token != "current") throw new System.Exception();
 				} }
 				"""),
 			new("flattened escaped key and private property", """
@@ -96,7 +96,7 @@ internal static class FlattenedCases
 				public partial class Leaf : Root { public const string @class = "leaf"; }
 				public static class RegressionProbe { public static void Verify() {
 				 var flat = Leaf.ConstructUnvalidated("value").Flatten();
-				 if (flat.@class != "leaf" || flat.@event != "value" || Root.MapFromFlattenedDataUnvalidated(flat).Flatten().@event != "value") throw new System.Exception();
+				 if (flat.Class != "leaf" || flat.Event != "value" || Root.MapFromFlattenedDataUnvalidated(flat).Flatten().Event != "value") throw new System.Exception();
 				} }
 				"""),
 			new("flattened model name collision diagnosed", """

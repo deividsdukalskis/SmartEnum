@@ -75,7 +75,7 @@ public sealed partial class SmartEnumGenerator
 				if (member.Symbol is IPropertySymbol { GetMethod: null }) Reject(member.Symbol, "flattened data requires a readable property");
 				if (member.Name == root.Name + "Flattened") Reject(member.Symbol, "the data name conflicts with the flattened model class name");
 				if (member.Name == "OptionalValue") Reject(member.Symbol, "the data name conflicts with the generated optional value type");
-				if (member.Name.StartsWith("__SmartEnum", StringComparison.Ordinal)) Reject(member.Symbol, "the __SmartEnum prefix is reserved for generated transfer state");
+				if (member.Name.StartsWith("__SmartEnum", StringComparison.Ordinal)) Reject(member.Symbol, "the SmartEnum prefix is reserved for generated transfer state");
 				if (member.Type.TypeKind is TypeKind.Pointer or TypeKind.FunctionPointer || member.Type.IsRefLikeType
 					|| member.Symbol is IPropertySymbol { ReturnsByRef: true } or IPropertySymbol { ReturnsByRefReadonly: true } or IFieldSymbol { IsFixedSizeBuffer: true })
 				{
@@ -143,6 +143,23 @@ public sealed partial class SmartEnumGenerator
 		}
 
 		DataMember[] mapperData = mappedMembers.SelectMany(type => GetData(type, root).Concat(GetPath(type, root).SelectMany(GetOwnSnapshots))).ToArray();
+		foreach (IGrouping<string, DataMember> group in mapperData.GroupBy(member => FlattenedName(member.Name)))
+		{
+			if (group.Select(member => member.Name).Distinct(StringComparer.Ordinal).Count() > 1)
+				Reject(root, $"data names {string.Join(", ", group.Select(member => "'" + member.Name + "'").Distinct())} normalize to the same flattened property '{group.Key}'");
+		}
+
+		string[] flattenedNames = GetFlattenedKeyNames(GetAttributes(root, attribute), GetFlattenedMembers(root, mappedMembers.ToArray()))
+			.Select(name => name.Substring(1)).Concat(mapperData.Select(member => FlattenedName(member.Name))).ToArray();
+		foreach (string name in flattenedNames)
+		{
+			if (!SyntaxFacts.IsValidIdentifier(name) || name == root.Name + "Flattened" || name == "OptionalValue"
+				|| name.StartsWith("SmartEnum", StringComparison.Ordinal) || root.TypeParameters.Any(parameter => parameter.Name == name))
+			{
+				Reject(root, $"normalized flattened property '{name}' is invalid or conflicts with a generated name or type parameter");
+			}
+		}
+
 		foreach (DataMember member in mapperData)
 		{
 			if (!IsVisibleInPublicApi(member.Type, root)) Reject(member.Symbol, "the data type is less accessible than the root's public mapper");
@@ -165,12 +182,11 @@ public sealed partial class SmartEnumGenerator
 			}
 		}
 
-		string[] generatedProperties = GetKeyParameters(GetAttributes(root, attribute), GetFlattenedMembers(root, mappedMembers.ToArray())).Select(name => name.Substring(1))
-			.Concat(mapperData.Select(member => member.Name)).Concat(new[] { "OptionalValue" }).ToArray();
+		string[] generatedProperties = flattenedNames.Concat(new[] { "OptionalValue" }).ToArray();
 		if (existingModels.Any(model => generatedProperties.Any(name => model.GetMembers(name).Length > 0)))
 			Reject(root, "a flattened model customization conflicts with a generated member");
-		if (existingModels.Any(model => model.GetMembers().Any(member => member.Name.StartsWith("__SmartEnum", StringComparison.Ordinal))))
-			Reject(root, "the __SmartEnum prefix is reserved for generated transfer state");
+		if (existingModels.Any(model => model.GetMembers().Any(member => member.Name.StartsWith("SmartEnum", StringComparison.Ordinal))))
+			Reject(root, "the SmartEnum prefix is reserved for generated transfer state");
 
 		if (root.GetMembers("MapFromFlattenedDataUnvalidated").OfType<IMethodSymbol>().Any(method => method.Arity == 0
 			&& method.Parameters.Length is 1 or 2 && method.Parameters[0].Type.Name == root.Name + "Flattened"

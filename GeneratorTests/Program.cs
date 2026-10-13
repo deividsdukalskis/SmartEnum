@@ -158,6 +158,21 @@ public partial class Leaf : Root { public const int Id = 1; } }
 namespace Two { [SmartEnum<int>("Id")] public abstract partial class Root { }
 public partial class Leaf : Root { public const int Id = 2; } }
 """, generatedTypes: 6);
-foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
+foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All).Concat(FlattenedNamingCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
+System.Globalization.CultureInfo originalCulture = System.Globalization.CultureInfo.CurrentCulture;
+try
+{
+	System.Globalization.CultureInfo.CurrentCulture = new("tr-TR");
+	await Check("flattened naming uses invariant casing", """
+		using SmartEnum;
+		[SmartEnum<int>("id")] public abstract partial class Root { private string _item_name; }
+		public partial class Leaf : Root { public const int id = 1; }
+		public static class RegressionProbe { public static void Verify() {
+		 if (Leaf.ConstructUnvalidated("item").Flatten().ItemName != "item") throw new System.Exception();
+		} }
+		""");
+}
+finally { System.Globalization.CultureInfo.CurrentCulture = originalCulture; }
+
 await LifecycleChecks.RunAsync(references);
 Console.WriteLine($"All {passed} generator/analyzer regression cases and lifecycle checks passed.");

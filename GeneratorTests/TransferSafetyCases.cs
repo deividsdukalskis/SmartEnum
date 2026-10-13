@@ -78,7 +78,7 @@ internal static class TransferSafetyCases
 				public partial class Leaf : Root { public const int Id = 1; }
 				public static class RegressionProbe { public static void Verify() {
 				 var flat = Leaf.ConstructUnvalidated("state").Flatten();
-				 if (flat.base_token != "state" || Root.MapFromFlattenedDataUnvalidated(flat).Flatten().base_token != "state") throw new System.Exception();
+				 if (flat.BaseToken != "state" || Root.MapFromFlattenedDataUnvalidated(flat).Flatten().BaseToken != "state") throw new System.Exception();
 				} }
 				"""),
 			new("unconstrained optional reference distinguishes present null from absence", """

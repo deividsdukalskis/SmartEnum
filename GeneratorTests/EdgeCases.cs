@@ -15,7 +15,7 @@ internal static class EdgeCases
 				public abstract partial class Middle : Root { public new const int Id = 1; }
 				public partial class Leaf : Middle { public const int key_Id = 2; }
 				public static class RegressionProbe { public static void Verify() {
-				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { key_Id = 1, key_key_Id = 2, Id = 42 }).Id != 42) throw new System.Exception();
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { KeyId = 1, KeyKeyId = 2, Id = 42 }).Id != 42) throw new System.Exception();
 				} }
 				""");
 			yield return new("explicit private backing field values are preserved", """
@@ -27,7 +27,7 @@ internal static class EdgeCases
 				public partial class Leaf : Root { public const int Id = 1; }
 				public static class RegressionProbe { public static void Verify() {
 				 if (Leaf.ConstructUnvalidated(Name: "text", text: "stored").Name != "stored") throw new System.Exception();
-				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "text", text = "mapped" }).Name != "mapped") throw new System.Exception();
+				 if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "text", Text = "mapped" }).Name != "mapped") throw new System.Exception();
 				} }
 				""");
 			yield return new("internal branch cannot expose internal mapper data", """

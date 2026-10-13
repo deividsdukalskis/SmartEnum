@@ -63,7 +63,12 @@ names must be unique throughout the hierarchy except for overrides of the same
 contract. Multiple incompatible data types under one name are diagnosed.
 
 Private fields retain their visibility and use their declared names as parameters
-in constructors and `ConstructUnvalidated`, and as flattened properties. Inherited
+in constructors and `ConstructUnvalidated`. Flattened property names are normalized
+to PascalCase with underscores removed: `_first_name` becomes `FirstName`,
+`firstName` becomes `FirstName`, and `URL_VALUE` becomes `UrlValue`. Each underscore
+starts a new word; otherwise existing internal mixed casing is preserved. Casing
+is culture-independent. This applies to data, snapshots, external-parent data
+(`base_token` becomes `BaseToken`) and discriminator properties. Inherited
 private fields are initialized by the constructor of their declaring class.
 Field types must be accessible to the generated public factories, and duplicate
 data names within an inheritance path are diagnosed. This adds required parameters
@@ -84,8 +89,20 @@ as separate parameters.
 The flattened model contains the union of hierarchy data. Properties not present
 in every concrete branch are nullable and remain null when `Flatten()` is called
 on another branch. Shared properties retain their declared types. Discriminator
-properties retain their key types; conflicting names receive repeated `key_`
-prefixes. Ordinary constants are excluded.
+properties retain their key types; conflicting normalized discriminator names
+receive repeated `Key` prefixes. Ordinary constants are excluded.
+
+Different data names that normalize to the same flattened name are diagnosed
+with `SMARTENUM012`; they are never silently merged. For example, `_name` and
+`Name` conflict. Rename one member or explicitly ignore the backing field when
+the property alone is the intended transfer contract. Names that become empty or
+invalid after normalization are also diagnosed. Update flattened initializers,
+custom hooks and serialized field names when migrating; original constructor and
+legacy-mapper parameter names stay unchanged.
+
+Branch nullability depends on whether a member exists in every concrete branch,
+not on whether it is declared directly in the root. Null represents absence from
+a branch; zero or false can still be legitimate values on a branch that has it.
 
 Null input throws `ArgumentNullException`. The model tracks property assignments,
 so omitted discriminators and omitted non-nullable data required by the selected
@@ -200,7 +217,7 @@ state must be initialized by a constructor declaring `SetsRequiredMembers`.
   inaccessible data types, unsafe/ref-like data and conflicting generated
   signatures require explicit model changes.
 - Custom flattened declarations must be compatible partial classes and cannot
-  redefine generated properties. `OptionalValue` and the `__SmartEnum` prefix
+  redefine generated properties. `OptionalValue` and the `SmartEnum` prefix
   are reserved for generated state.
 
 Hierarchies must be declared in the consumer compilation. A generator cannot
