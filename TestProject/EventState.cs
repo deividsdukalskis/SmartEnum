@@ -2,9 +2,8 @@ namespace TestProject;
 
 using SmartEnum;
 
-[SmartEnum<string>("EventStatusId", FlatteningStrategy.Separate, KeyValueOnBranchMissing.FirstBranch)]
-[SmartEnum<string>("EventStatusSubtypeId", FlatteningStrategy.Separate, KeyValueOnBranchMissing.SetNull)]
+[SmartEnum<string>("EventStatusId", FlatteningStrategy.Nested, KeyValueOnBranchMissing.FirstBranch)]
 public abstract partial class EventState
 {
-	public string CreatedName { get; }
+	public string? CreatedName { get; }
 }
