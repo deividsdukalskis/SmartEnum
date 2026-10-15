@@ -16,7 +16,7 @@ public sealed partial class SmartEnumGenerator
 
 	private static string CompositeConstructor(INamedTypeSymbol type, TransferPlan plan)
 	{
-		TransferSlot[] slots = plan.Slots.Where(slot => slot.Data is { } data && GetPath(type, plan.Root).Any(node => SameDefinition(node, data.Property.ContainingType))).ToArray();
+		TransferSlot[] slots = plan.Slots.Where(slot => slot.Data is { } data && GetPath(type, plan.Root).Any(node => SameDefinition(node, data.Owner))).ToArray();
 		string value(TransferMember member) => CompositeValue(slots.Single(slot => slot.Data!.Name == member.Name));
 		string parent = " : base(" + string.Join(", ", StrategyData(type.BaseType!, plan.Root).Select(value)) + ")";
 		string required = slots.Any(slot => slot.Data!.Property is IPropertySymbol { IsRequired: true } || slot.Data.Storage is IFieldSymbol { IsRequired: true })
@@ -35,7 +35,9 @@ public sealed partial class SmartEnumGenerator
 	private static IEnumerable<string> CompositeFlattenParameters(TransferPlan plan, bool identity = true) => (identity && plan.Identity is { } member ? new[] { TypeName(member.Type) + " " + Identifier(ForeignKeyName(member)) } : Enumerable.Empty<string>())
 		.Concat(plan.FlattenCallbacks.Select(TransferCallbackDeclaration)).Concat(plan.KeyCallbacks.Select(TransferKeyDeclaration));
 	private static IEnumerable<string> CompositeFlattenArguments(TransferPlan plan) => plan.FlattenCallbacks.Select(TransferCallback).Concat(plan.KeyCallbacks.Select(key => SeparateKeyCallback(key.Attribute)));
-	private static string CompositeCallbackDoc(TransferSlot slot) => $"/// <param name=\"{TransferCallback(slot)}\">Supplies {slot.Data!.Property.ContainingType.Name}.{slot.Data.Property.Name} when its transfer value or containing nested object is absent. Invoked only when a value is needed.</param>";
+	private static string CompositeCallbackDoc(TransferSlot slot) => $"/// <param name=\"{TransferCallback(slot)}\">Restores {slot.Data!.Property.ContainingType.Name}.{slot.Data.Property.Name} from missing flattened {slot.Path.Replace("@", string.Empty).TrimStart('.')}. Called only if the transfer value or its containing object is null; the domain property requires a value.</param>";
+	private static string CompositeFlattenCallbackDoc(TransferSlot slot) => $"/// <param name=\"{TransferCallback(slot)}\">Supplies flattened {slot.Path.Replace("@", string.Empty).TrimStart('.')} for {slot.Data!.Property.ContainingType.Name}.{slot.Data.Property.Name}. Called only when the active branch does not contain this required property and no retained transfer value exists. Active branch values and retained values take precedence.</param>";
+	private static string KeyCallbackDoc(TransferKey key) => $"/// <param name=\"{SeparateKeyCallback(key.Attribute)}\">Supplies flattened discriminator {FlattenedName(key.Name)} for hierarchy {key.Group.Name}. Called only for a branch without this discriminator level because its policy is PromptSubstitute. Existing branch constants take precedence.</param>";
 
 	private static string CompositeRootApi(TransferPlan plan)
 	{
@@ -58,14 +60,14 @@ public sealed partial class SmartEnumGenerator
 			protected {{plan.Model.Type}}? FlattenedData { get; init; }
 			/// <summary>Warning: Bypasses domain validation. Use only for plain data transfer, such as ORM materialization. Returns null for an unknown discriminator.</summary>
 			{{string.Join("\n", callbacks.Select(CompositeCallbackDoc))}}
-			public static {{TypeName(plan.Root)}}? MapFromFlattenedDataUnvalidated({{plan.Model.Type}} flattened{{string.Concat(callbacks.Select(slot => ", " + TransferCallbackDeclaration(slot)))}})
+			public static {{TypeName(plan.Root)}}? ConstructUnvalidated({{plan.Model.Type}} flattened{{string.Concat(callbacks.Select(slot => ", " + TransferCallbackDeclaration(slot)))}})
 			{
 				if (flattened is null) throw new global::System.ArgumentNullException(nameof(flattened));
 				{{Indent(string.Join("\n", branches))}}
 				return null;
 			}
 			/// <summary>Copies current domain values and preserves unused transfer data. Fallback delegates supply required values only when no retained value exists.</summary>
-			{{string.Join("\n", plan.FlattenCallbacks.Select(CompositeCallbackDoc))}}
+			{{string.Join("\n", plan.FlattenCallbacks.Select(CompositeFlattenCallbackDoc))}}
 			{{string.Join("\n", plan.KeyCallbacks.Select(key => $"/// <param name=\"{SeparateKeyCallback(key.Attribute)}\">Supplies discriminator {FlattenedName(key.Name)} only when the concrete branch has no value at that discriminator level.</param>"))}}
 			public abstract {{plan.Model.Type}} Flatten({{string.Join(", ", CompositeFlattenParameters(plan))}});
 			""";
@@ -78,12 +80,14 @@ public sealed partial class SmartEnumGenerator
 		return $$"""
 			/// <summary>Warning: Bypasses domain validation. Use only for plain data transfer, such as ORM materialization.</summary>
 			{{string.Join("\n", callbacks.Select(CompositeCallbackDoc))}}
-			public static {{TypeName(type)}} ConstructUnvalidated({{modelType}} flattened{{string.Concat(callbacks.Select(slot => ", " + TransferCallbackDeclaration(slot)))}})
+			public {{(!plan.Separate && callbacks.Select(slot => TypeName(slot.Data!.Type)).SequenceEqual(CompositeConstructionCallbacks(plan).Select(slot => TypeName(slot.Data!.Type))) ? "new " : "")}}static {{TypeName(type)}} ConstructUnvalidated({{modelType}} flattened{{string.Concat(callbacks.Select(slot => ", " + TransferCallbackDeclaration(slot)))}})
 			{
 				if (flattened is null) throw new global::System.ArgumentNullException(nameof(flattened));
 				return new {{TypeName(type)}}(flattened{{string.Concat(callbacks.Select(slot => ", " + TransferCallback(slot)))}});
 			}
-			/// <inheritdoc />
+			/// <summary>Flattens this variant, retaining inactive branch data and requesting missing required values only when necessary.</summary>
+			{{string.Join("\n", plan.FlattenCallbacks.Select(CompositeFlattenCallbackDoc))}}
+			{{string.Join("\n", plan.KeyCallbacks.Select(KeyCallbackDoc))}}
 			public override {{modelType}} Flatten({{string.Join(", ", CompositeFlattenParameters(plan))}})
 			{
 				if (this.GetType() != typeof({{TypeName(type)}})) throw new global::System.InvalidOperationException("An unregistered runtime subclass cannot be flattened without losing its state.");
@@ -113,7 +117,7 @@ public sealed partial class SmartEnumGenerator
 				INamedTypeSymbol? owner = KeyOwner(type, key);
 				value = owner is not null ? TypeName(owner) + "." + Identifier(key.Name) : key.Policy == 0 ? "null" : key.Policy == 1 ? SeparateKeyCallback(key.Attribute) + "()" : "default!";
 			}
-			else if (slot.Data is { } member && path.Any(item => SameDefinition(item, member.Property.ContainingType)))
+			else if (slot.Data is { } member && path.Any(item => SameDefinition(item, member.Owner)))
 			{
 				value = StrategyRead(member);
 			}

@@ -88,14 +88,14 @@ internal static class CompositePersistence
 		{
 			_ = context.Database.EnsureCreated();
 			FlatMeeting flat = FlatMeeting.ConstructUnvalidated(new FlatMeetingFlattened { Id = "flat", Kind = 2, Count = 42, Reason = "weather" }, () => throw new Exception());
-			context.Add(flat.Flatten(() => throw new Exception("Retained count must avoid fallback.")));
+			_ = context.Add(flat.Flatten(() => throw new Exception("Retained count must avoid fallback.")));
 			NestedMeeting nested = NestedMeeting.ConstructUnvalidated(new NestedMeetingFlattened
 			{
 				Id = "nested",
 				Kind = 1,
 				Status = new() { NestedReady = new() { Count = 7 }, NestedCancelled = new() { MeetingId = "nested", Reason = "retained" } }
 			}, () => 0, () => throw new Exception());
-			context.Add(nested.Flatten());
+			_ = context.Add(nested.Flatten());
 			_ = context.SaveChanges();
 		}
 

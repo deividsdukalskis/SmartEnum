@@ -14,6 +14,7 @@ try {
     Invoke-Dotnet build SmartEnum.slnx -c Release --no-restore -warnaserror
     Invoke-Dotnet run --project GeneratorTests -c Release --no-build
     Invoke-Dotnet run --project TestProject -c Release --no-build
+    Invoke-Dotnet run --project EFCoreTests -c Release --no-build
 
     $verificationRoot = Join-Path $PSScriptRoot 'bin/verification'
     $packageDirectory = Join-Path $verificationRoot 'packages'
@@ -47,15 +48,20 @@ try {
     @'
 using SmartEnum;
 
-if (Root.MapFromFlattenedDataUnvalidated(new RootFlattened { Id = 1, Name = "package" }) is not Leaf { Name: "package" })
+if (Root.ConstructUnvalidated(new RootFlattened { Id = 1, Name = "package" }) is not Leaf { Name: "package" })
     throw new System.Exception("Packaged generator did not initialize the consumer correctly.");
-RootFlattened flattened = Leaf.ConstructUnvalidated("round trip").Flatten();
-if (flattened.Id != 1 || Root.MapFromFlattenedDataUnvalidated(flattened).Name != "round trip")
+RootFlattened flattened = Leaf.ConstructUnvalidated(new RootFlattened { Id = 1, Name = "round trip" }).Flatten();
+if (flattened.Id != 1 || Root.ConstructUnvalidated(flattened)?.Name != "round trip")
     throw new System.Exception("Packaged generator did not round trip flattened data correctly.");
 System.Console.WriteLine("PASS isolated NuGet consumer");
 
-[SmartEnum<int>("Id")]
-public abstract partial class Root { public string Name { get; } }
+[SmartEnum<int>("Id", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)]
+public abstract partial class Root : OrdinaryBase { }
+public class OrdinaryBase
+{
+    public string Name { get; }
+    protected OrdinaryBase(string name) => Name = name;
+}
 public partial class Leaf : Root { public const int Id = 1; }
 '@ | Set-Content (Join-Path $consumerDirectory 'Program.cs')
 

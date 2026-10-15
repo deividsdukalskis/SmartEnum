@@ -56,10 +56,11 @@ public sealed partial class SmartEnumGenerator
 		public bool Separate { get; }
 		public TransferPlan(INamedTypeSymbol root, INamedTypeSymbol[] members, TransferNode model, TransferNode dataNode, TransferMember? identity, bool separate)
 			=> (this.Root, this.Members, this.Model, this.DataNode, this.Identity, this.Separate) = (root, members, model, dataNode, identity, separate);
-		public IEnumerable<TransferSlot> ConstructionCallbacks(INamedTypeSymbol type) => this.Slots.Where(slot => slot.Data is { } member && GetPath(type, this.Root).Any(node => SameDefinition(node, member.Property.ContainingType))
+		public IEnumerable<TransferSlot> ConstructionCallbacks(INamedTypeSymbol type) => this.Slots.Where(slot => slot.Data is { } member && GetPath(type, this.Root).Any(node => SameDefinition(node, member.Owner))
 			&& (member.NeedsFallback || (!member.Nullable && slot.Node.Path.Length > 0)));
 		public IEnumerable<TransferSlot> FlattenCallbacks => this.Separate ? Enumerable.Empty<TransferSlot>() : this.Slots.Where(slot => slot.Data is { Nullable: false }
-			&& slot.Node == this.DataNode && this.Members.Any(type => !type.IsAbstract && !GetPath(type, this.Root).Any(node => SameDefinition(node, slot.Data.Property.ContainingType))));
+			&& slot.Node == this.DataNode && GetPath(this.Root, slot.Data.Owner).Count == 0
+			&& this.Members.Any(type => !type.IsAbstract && !GetPath(type, this.Root).Any(node => SameDefinition(node, slot.Data.Owner))));
 		public IEnumerable<TransferKey> KeyCallbacks => this.Keys.Where(key => key.Policy == 1 && this.Members.Any(type => !type.IsAbstract && KeyOwner(type, key) is null));
 	}
 
@@ -76,7 +77,9 @@ public sealed partial class SmartEnumGenerator
 	private static INamedTypeSymbol? KeyOwner(INamedTypeSymbol leaf, TransferKey key)
 	{
 		List<INamedTypeSymbol> path = GetPath(leaf, key.Group);
-		return path.Count > key.Index + 1 ? path[key.Index + 1] : null;
+		return path.Skip(1).Take(key.Index).Any(type => type.GetAttributes().Any(attribute => attribute.AttributeClass?.OriginalDefinition.ToDisplayString() == "SmartEnum.SmartEnumAttribute<TKey>"))
+			? null
+			: path.Count > key.Index + 1 ? path[key.Index + 1] : null;
 	}
 
 	private static string ForeignKeyName(TransferMember identity)
@@ -87,7 +90,7 @@ public sealed partial class SmartEnumGenerator
 
 	private static IEnumerable<TransferNode> TransferNodes(TransferNode node) => new[] { node }.Concat(node.Children.SelectMany(TransferNodes));
 	private static string TransferAccess(string variable, string path, bool optional) => variable + (optional
-		? variable == "flattened" && path.Length > 0 ? "." + path.Substring(1).Replace(".", "?.") : path.Replace(".", "?.") : path);
+		? variable != "this.FlattenedData" && path.Length > 0 ? "." + path.Substring(1).Replace(".", "?.") : path.Replace(".", "?.") : path);
 	private static string TransferCallback(TransferSlot slot) => "map" + slot.Name;
 	private static string TransferCallbackDeclaration(TransferSlot slot) => $"global::System.Func<{TypeName(slot.Data!.Type)}> {TransferCallback(slot)}";
 	private static string TransferKeyDeclaration(TransferKey key) => $"global::System.Func<{TypeName(key.Attribute.AttributeClass!.TypeArguments[0])}> {SeparateKeyCallback(key.Attribute)}";
@@ -103,7 +106,7 @@ public sealed partial class SmartEnumGenerator
 				INamedTypeSymbol parent = type.BaseType!;
 				TransferNode node = plan.Nodes[parent];
 				TransferKey key = plan.Keys.Last(item => KeyOwner(type, item) is { } owner && SameDefinition(owner, type));
-				if (key.Strategy == 1 || GetAttributes(type, attribute).Length > 0)
+				if (!plan.Separate && (key.Strategy == 1 || GetAttributes(type, attribute).Length > 0))
 				{
 					TransferNode child = new(FlattenedName(type.Name), node.Type + "." + Identifier(type.Name + "Flattened"), node.Path + "." + FlattenedIdentifier(type.Name), type);
 					node.Children.Add(child);

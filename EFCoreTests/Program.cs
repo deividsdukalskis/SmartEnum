@@ -24,8 +24,8 @@ using (PersistenceContext context = new(options))
 using (PersistenceContext context = new(options))
 {
 	List<StatusFlattened> persisted = [.. context.Set<StatusFlattened>().OrderBy(item => item.Id)];
-	if (persisted.Count != 2 || Status.MapFromFlattenedDataUnvalidated(persisted[0]) is not Cancelled { Reason: "weather" }
-		|| Status.MapFromFlattenedDataUnvalidated(persisted[1]) is not Ready { Count: 42, MeetingId: "meeting-1" })
+	if (persisted.Count != 2 || Status.ConstructUnvalidated(persisted[0]) is not Cancelled { Reason: "weather" }
+		|| Status.ConstructUnvalidated(persisted[1]) is not Ready { Count: 42, MeetingId: "meeting-1" })
 	{
 		throw new Exception("Polymorphic persistence round trip failed.");
 	}
@@ -44,4 +44,4 @@ using (PersistenceContext context = new(options))
 }
 
 Console.WriteLine("PASS EF Core SQLite TPC: separate tables, inherited data, nullability, polymorphic queries, round trips, updates, foreign keys");
-CompositePersistence.Verify();
+CompositePersistence.Verify(); ReusablePersistence.Verify();

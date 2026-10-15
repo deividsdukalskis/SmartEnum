@@ -12,7 +12,7 @@ internal static class LifecycleChecks
 		CSharpParseOptions options = new(LanguageVersion.CSharp11);
 		const string original = """
 			using SmartEnum;
-			[SmartEnum<int>("Id")] public abstract partial class Root { }
+			[SmartEnum<int>("Id", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { }
 			public partial class Leaf : Root { public const int Id = 1; }
 			""";
 		CSharpCompilation compilation = CSharpCompilation.Create("Lifecycle", [CSharpSyntaxTree.ParseText(original, options)], references,

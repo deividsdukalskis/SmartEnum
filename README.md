@@ -7,7 +7,7 @@ SmartEnum generates flattened data models and mapping methods for C# class hiera
 - [Attribute reference](docs/attributes.md) — what each attribute does and where to use it.
 - [Flat, Nested and parent models](docs/flat-nested-parents.md) — model shapes, parent classes and collections.
 - [Separate models and EF Core](docs/separate-ef-core.md) — concrete variant models and database mapping.
-- [Legacy API](docs/legacy-api.md) — the one-argument `[SmartEnum<TKey>("Key")]` API.
+- [Diagnostics](docs/diagnostics.md) — analyzer errors, warnings and Visual Studio settings.
 - [Private NuGet installation and publishing](docs/github-packages.md).
 
 ## Quick start
@@ -45,26 +45,23 @@ Ready ready = Ready.ConstructUnvalidated(new ReadyFlattened
 });
 
 StatusFlattened data = ready.Flatten();
-Status? restored = Status.MapFromFlattenedDataUnvalidated(data);
+Status? restored = Status.ConstructUnvalidated(data);
 ```
 
 **Unvalidated methods bypass domain validation.** Use them for plain data transfer, such as restoring ORM data. Existing constructors and setters can still execute user code.
 
 ## Attributes at a glance
 
-| Attribute | Purpose | API |
-| --- | --- | --- |
-| `SmartEnum<TKey>` | Defines a discriminator; its three-argument form also selects the model shape and missing-key policy. | Both |
-| `SmartEnumParent` | Generates a model for a class containing SmartEnum values or collections. | Three-argument |
-| `SmartEnumIdentity` | Identifies a value to copy into related models as a foreign key. | Three-argument |
-| `SmartEnumPrivateAccessor` | Reads and initializes a property's private backing field. | Three-argument |
-| `SmartEnumNullableProperty` | Makes a transfer property nullable without changing the domain property's type. | Three-argument |
-| `SmartEnumIgnore` | Excludes a field or property from mapping. | Both |
-| `SmartEnumSnapshot` | Copies a computed property without restoring it. | Legacy |
-| `SmartEnumParentData` | Maps an external base-constructor argument to readable state. | Legacy |
+| Attribute | Purpose |
+| --- | --- |
+| `SmartEnum<TKey>` | Starts a hierarchy or subclass hierarchy; selects its discriminator, model shape and missing-key policy. |
+| `SmartEnumParent` | Generates a model for a class containing SmartEnum values or collections. |
+| `SmartEnumIdentity` | Identifies a value to copy into related models as a foreign key. |
+| `SmartEnumPrivateAccessor` | Reads and initializes a property's explicitly named backing field. |
+| `SmartEnumNullableProperty` | Makes a transfer property nullable without changing the domain property's type. |
+| `SmartEnumIgnore` | Excludes a field or property from mapping. |
 
-See the [attribute reference](docs/attributes.md) for parameters, examples and API availability.
-
+See the [attribute reference](docs/attributes.md) for parameters and examples.
 ## Choose a model shape
 
 | Strategy | Result |
@@ -79,24 +76,26 @@ Flat and Nested can be mixed at different discriminator levels. Separate must be
 
 | Method | Purpose |
 | --- | --- |
-| `ConstructUnvalidated(...)` | Creates a known concrete domain type from transfer data. |
-| `MapFromFlattenedDataUnvalidated(...)` | Selects a concrete type using the discriminator values. The three-argument API returns `null` for an unknown combination. |
-| `Flatten(...)` | Copies domain data into its flattened representation. |
+| `ConstructUnvalidated(...)` | On a hierarchy root, selects a concrete variant using discriminators and returns null for unknown values. On a concrete class, constructs that known type. On a parent, restores its data and hierarchy properties. |
+| `Flatten(...)` | Copies domain data into its outer hierarchy representation. |
+| `FlattenHierarchy(...)` | Copies a subclass hierarchy into its own `<Subclass>Flattened` model. |
 
-Additional callback parameters supply missing values or map collections. Generated XML comments describe each callback.
+Direct hierarchy properties are constructed automatically. Required properties have a fallback callback for missing or unknown values; nullable properties accept null. Containers use conversion delegates. Each generated XML parameter comment explains the target property, why a callback exists and when it runs.
 
 ## Data and declaration rules
 
 - Roots and intermediate hierarchy classes are abstract; domain declarations are partial. A `SmartEnumParent` class must also be sealed.
 - Each discriminator level has a matching `public const` field of the declared key type.
-- Auto-getter properties and explicit public/private instance fields participate in mapping. An implemented getter without a setter needs `SmartEnumPrivateAccessor` in the three-argument API.
+- Properties and explicit public instance fields participate in mapping. An implemented getter without a setter needs `SmartEnumPrivateAccessor`.
+- Private fields are excluded unless a property explicitly names them with `SmartEnumPrivateAccessor`. The transfer member uses the property's name and the backing field's type.
 - Flattened member names use PascalCase without underscores: `_first_name` becomes `FirstName`. Conflicting names are diagnosed.
-- The three-argument API preserves declared property nullability unless `SmartEnumNullableProperty` is applied. The legacy API automatically makes branch-specific data nullable.
-- Included private fields become public transfer properties. Use `SmartEnumIgnore` for state that must not be transferred.
+- Properties preserve declared nullability unless `SmartEnumNullableProperty` is applied.
+- Standalone hierarchies support compatible generics, non-positional records and types nested in partial declarations.
+- Generic or reused hierarchy properties are supported under `SmartEnumParent(Separate)` with independent conversion delegates per property.
+- Roots and parent models may inherit from ordinary classes; inherited accessible properties are included. See [ordinary base classes](docs/flat-nested-parents.md#ordinary-base-classes) for constructor rules.
 - Reference values are copied shallowly.
 
-Supported declaration shapes differ between APIs. See the limitations in the [Flat/Nested guide](docs/flat-nested-parents.md#limitations), [Separate guide](docs/separate-ef-core.md#limitations) and [legacy guide](docs/legacy-api.md#limitations).
-
+The one-argument attribute, `SmartEnumSnapshot` and `SmartEnumParentData` have been removed. Migrate to the three-argument attribute and explicit accessors. SMARTENUM008 is retired: an attribute on an abstract subclass starts a new hierarchy. See the [subclass example](docs/flat-nested-parents.md#subclass-hierarchies) and remaining [limitations](docs/flat-nested-parents.md#limitations).
 ## Requirements
 
 - C# 11 or newer.

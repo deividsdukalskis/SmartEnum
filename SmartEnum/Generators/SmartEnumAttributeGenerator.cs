@@ -1,4 +1,4 @@
-﻿namespace SmartEnum.Generators;
+namespace SmartEnum.Generators;
 
 using Microsoft.CodeAnalysis;
 
@@ -19,8 +19,6 @@ public sealed class SmartEnumAttributeGenerator : IIncrementalGenerator
 					public string KeyName { get; }
 					public FlatteningStrategy FlatteningStrategy { get; }
 					public KeyValueOnBranchMissing KeyValueOnBranchMissing { get; }
-
-					public SmartEnumAttribute(string keyName) => this.KeyName = keyName;
 					public SmartEnumAttribute(string keyName, FlatteningStrategy flatteningStrategy, KeyValueOnBranchMissing keyValueOnBranchMissing)
 						=> (this.KeyName, this.FlatteningStrategy, this.KeyValueOnBranchMissing) = (keyName, flatteningStrategy, keyValueOnBranchMissing);
 				}
@@ -69,18 +67,5 @@ public sealed class SmartEnumAttributeGenerator : IIncrementalGenerator
 				[AttributeUsage(AttributeTargets.Field | AttributeTargets.Property, Inherited = false)]
 				internal sealed class SmartEnumIgnoreAttribute : Attribute { }
 
-				/// <summary>Copies a computed property's value to flattened data. It is not used during restoration.</summary>
-				[AttributeUsage(AttributeTargets.Property, Inherited = false)]
-				internal sealed class SmartEnumSnapshotAttribute : Attribute { }
-
-				/// <summary>Maps an external constructor argument to a readable member on the root or its parent.</summary>
-				[AttributeUsage(AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
-				internal sealed class SmartEnumParentDataAttribute : Attribute
-				{
-					public string ParameterName { get; }
-					public string MemberName { get; }
-					public SmartEnumParentDataAttribute(string parameterName, string memberName)
-						=> (this.ParameterName, this.MemberName) = (parameterName, memberName);
-				}
 				"""));
 }

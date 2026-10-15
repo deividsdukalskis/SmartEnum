@@ -8,11 +8,13 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumGenerator
 {
-	private static HashSet<INamedTypeSymbol> GenerateCompositeHierarchies(SourceProductionContext output, Compilation compilation, INamedTypeSymbol[] all, INamedTypeSymbol attribute)
+	private static HashSet<INamedTypeSymbol> GenerateCompositeHierarchies(GenerationContext output, Compilation compilation, INamedTypeSymbol[] all, INamedTypeSymbol attribute)
 	{
 		INamedTypeSymbol[] roots = all.Where(type => GetAttributes(type, attribute).Any(item => item.ConstructorArguments.Length == 3)
 			&& (type.BaseType is null || !StrategyContract.IsExplicit(type.BaseType))).ToArray();
 		INamedTypeSymbol[] parents = all.Where(type => HasDataAttribute(type, "SmartEnumParentAttribute")).ToArray();
+		HashSet<INamedTypeSymbol> reusableParents = GenerateReusableParents(output, compilation, all, roots, parents, attribute);
+		parents = parents.Where(parent => !reusableParents.Contains(parent)).ToArray();
 		HashSet<INamedTypeSymbol> handled = new(SymbolEqualityComparer.Default);
 		HashSet<INamedTypeSymbol> invalid = new(SymbolEqualityComparer.Default);
 		Dictionary<INamedTypeSymbol, INamedTypeSymbol[]> members = new(SymbolEqualityComparer.Default);
@@ -22,12 +24,18 @@ public sealed partial class SmartEnumGenerator
 			members[root] = all.Where(type => GetPath(type, root).Count > 0).OrderBy(type => type.ToDisplayString(), StringComparer.Ordinal).ToArray();
 			owners[root] = parents.SelectMany(parent => StrategyData(parent).Where(member => ContainsTransferRoot(member.Type, root)).Select(member => (parent, member))).ToList();
 			bool separate = members[root].SelectMany(type => GetAttributes(type, attribute)).All(item => item.ConstructorArguments.Length == 3 && item.ConstructorArguments[1].Value is 2);
-			if (separate && owners[root].Count == 0) continue;
+			if (separate && owners[root].Count == 0 && !members[root].Any(type => !SameDefinition(type, root) && GetAttributes(type, attribute).Length > 0)) continue;
 			_ = handled.Add(root);
 			if (!ValidateCompositeContract(output, compilation, root, members[root], attribute, false)) _ = invalid.Add(root);
+			if (owners[root].Count > 0 && (root.IsGenericType || owners[root].Any(owner => owner.Parent.IsGenericType)))
+			{
+				CompositeError(output, root, "Use SmartEnumParent(Separate) for generic parents or generic hierarchy properties.", id: "SMARTENUM045");
+				_ = invalid.Add(root);
+			}
+
 			if (owners[root].Count > 1)
 			{
-				CompositeError(output, root, "A hierarchy used in multiple parent properties has an ambiguous flattened owner. Use distinct hierarchy roots for distinct owned transfer contracts.");
+				CompositeError(output, root, "Use SmartEnumParent(Separate) on every owner when a hierarchy appears in multiple parent properties.", id: "SMARTENUM046");
 				_ = invalid.Add(root);
 			}
 		}
@@ -39,7 +47,7 @@ public sealed partial class SmartEnumGenerator
 			if (!ValidateCompositeContract(output, compilation, parent, new[] { parent }, attribute, true) || referenced.Any(invalid.Contains)) continue;
 			if (referenced.Length == 0)
 			{
-				CompositeError(output, parent, "SmartEnumParent requires a property containing an explicit-strategy SmartEnum hierarchy.");
+				CompositeError(output, parent, "SmartEnumParent requires a property containing an explicit-strategy SmartEnum hierarchy.", id: "SMARTENUM047");
 				continue;
 			}
 
@@ -75,6 +83,15 @@ public sealed partial class SmartEnumGenerator
 			}
 
 			if (!ValidateTransferLayout(output, parent, model, links.Select(link => link.Plan))) continue;
+			IEnumerable<string> callbackNames = StrategyData(parent).Where(member => member.NeedsFallback && !links.Any(link => link.Member.Name == member.Name)).Select(member => member.Parameter)
+				.Concat(links.SelectMany(link => CompositeConstructionCallbacks(link.Plan)).Select(TransferCallback).Distinct())
+				.Concat(links.Where(NeedsParentCallback).Select(ParentMappingName));
+			if (callbackNames.GroupBy(name => name).Any(group => group.Count() > 1))
+			{
+				CompositeError(output, parent, "Parent property fallbacks and hierarchy callbacks have colliding parameter names. Rename the conflicting property.", id: "SMARTENUM043");
+				continue;
+			}
+
 			foreach (ParentLink link in links)
 			{
 				EmitTransferHierarchy(output, link.Plan, link.Independent && (strategy == 2 || link.Plan.Separate));
@@ -88,7 +105,7 @@ public sealed partial class SmartEnumGenerator
 		foreach (INamedTypeSymbol root in handled.Where(root => owners[root].Count == 0 && !invalid.Contains(root)))
 		{
 			TransferNode model = new(root.Name + "Flattened", FlattenedTypeName(root), string.Empty);
-			TransferPlan plan = new(root, members[root], model, model, null, false);
+			TransferPlan plan = new(root, members[root].Select(type => MapToRoot(type, root)!).ToArray(), model, model, null, GetAttributes(root, attribute)[0].ConstructorArguments[1].Value is 2);
 			PopulateTransferPlan(plan, attribute);
 			if (ValidateTransferLayout(output, root, model, new[] { plan })) EmitTransferHierarchy(output, plan, true);
 		}
@@ -119,18 +136,20 @@ public sealed partial class SmartEnumGenerator
 		}
 		""";
 
-	private static string CompositeDtoDeclaration(INamedTypeSymbol type) => (type.DeclaredAccessibility == Accessibility.Public ? "public" : "internal") + " partial class " + Identifier(type.Name + "Flattened");
+	private static string CompositeDtoDeclaration(INamedTypeSymbol type) => StrategyDtoDeclaration(type, false).Replace("sealed partial", "partial");
 
-	private static void EmitTransferHierarchy(SourceProductionContext output, TransferPlan plan, bool emitModel)
+	private static void EmitTransferHierarchy(GenerationContext output, TransferPlan plan, bool emitModel)
 	{
 		if (plan.Separate)
 		{
-			string common = string.Join("\n", plan.Slots.Where(slot => slot.Data is null || SameDefinition(slot.Data.Property.ContainingType, plan.Root)).Select(slot => $"public {slot.Type} {Identifier(slot.Name)} {{ get; set; }} = default!;"));
+			string common = string.Join("\n", plan.Slots.Where(slot => slot.Data is null || SameDefinition(slot.Data.Owner, plan.Root)).Select(slot => $"public {slot.Type} {Identifier(slot.Name)} {{ get; set; }} = default!;"));
 			output.AddSource("Composite.Flattened." + GetHintName(plan.Root), WrapDeclaration(plan.Root, StrategyDtoDeclaration(plan.Root, true), common));
-			foreach (INamedTypeSymbol leaf in plan.Members.Where(type => !type.IsAbstract))
+			foreach (INamedTypeSymbol mappedLeaf in plan.Members.Where(type => !type.IsAbstract))
 			{
-				string properties = string.Join("\n", StrategyData(leaf, plan.Root).Where(member => !SameDefinition(member.Property.ContainingType, plan.Root)).Select(SeparateProperty));
-				output.AddSource("Composite.Flattened." + GetHintName(leaf), WrapDeclaration(leaf, StrategyDtoDeclaration(leaf, false, plan.Model.Type), properties));
+				INamedTypeSymbol leaf = mappedLeaf.OriginalDefinition;
+				string properties = string.Join("\n", StrategyData(leaf, plan.Root).Where(member => !SameDefinition(member.Owner, plan.Root)).Select(SeparateProperty));
+				INamedTypeSymbol? group = GetPath(leaf, plan.Root).Skip(1).Reverse().FirstOrDefault(node => plan.Keys.Any(key => SameDefinition(key.Group, node)));
+				output.AddSource("Composite.Flattened." + GetHintName(leaf), WrapDeclaration(leaf, StrategyDtoDeclaration(leaf, false, FlattenedTypeName(group ?? GetPath(leaf, plan.Root)[0])), properties));
 			}
 		}
 		else if (emitModel)
@@ -138,14 +157,26 @@ public sealed partial class SmartEnumGenerator
 			output.AddSource("Composite.Flattened." + GetHintName(plan.Root), WrapDeclaration(plan.Root, CompositeDtoDeclaration(plan.Root), RenderTransferBody(plan.Model)));
 		}
 
-		foreach (INamedTypeSymbol type in plan.Members)
+		foreach (INamedTypeSymbol mappedType in plan.Members)
 		{
+			INamedTypeSymbol type = mappedType.OriginalDefinition;
+			TransferPlan local = plan;
+			INamedTypeSymbol localRoot = GetPath(type, plan.Root)[0];
+			if (!SymbolEqualityComparer.Default.Equals(localRoot, plan.Root))
+			{
+				TransferNode model = new(localRoot.Name + "Flattened", FlattenedTypeName(localRoot), string.Empty);
+				local = new(localRoot, plan.Members.Select(member => MapToRoot(member.OriginalDefinition, localRoot)!).ToArray(), model, model, null, plan.Separate);
+				PopulateTransferPlan(local, plan.Keys[0].Attribute.AttributeClass!.OriginalDefinition);
+			}
+
 			output.CancellationToken.ThrowIfCancellationRequested();
 			string body = StrategyReaders(type);
-			body += "\n" + (type.IsAbstract ? StrategyConstructor(type, plan.Root, false) : CompositeConstructor(type, plan));
-			if (SameDefinition(type, plan.Root)) body += "\n" + CompositeRootApi(plan);
-			if (!type.IsAbstract) body += "\n" + CompositeConcreteApi(type, plan);
+			body += "\n" + (type.IsAbstract ? StrategyConstructor(type, local.Root, false) : CompositeConstructor(type, local));
+			if (SameDefinition(type, local.Root)) body += "\n" + CompositeRootApi(local);
+			if (!type.IsAbstract) body += "\n" + CompositeConcreteApi(type, local);
 			output.AddSource(GetHintName(type), WrapType(type, body));
 		}
+
+		EmitSubhierarchyViews(output, plan);
 	}
 }

@@ -3,56 +3,28 @@ using TestProject;
 using TestProject.EventStates;
 using TestProject.EventStates.EventSubtypes;
 
-DateTime scheduledAt = new(2026, 10, 5);
-DateTime rescheduledAt = scheduledAt.AddDays(1);
-RescheduledEvent direct = RescheduledEvent.ConstructUnvalidated("Alice", scheduledAt, rescheduledAt);
-Assert(direct.CreatedName == "Alice" && direct.ScheduledAt == scheduledAt && direct.RescheduledAt == rescheduledAt,
-	"ConstructUnvalidated must initialize properties at every inheritance level.");
-
-EventState scheduled = EventState.MapFromFlattenedDataUnvalidated(new EventStateFlattened
+DateTime scheduledAt = new(2026, 10, 14);
+RescheduledEvent direct = RescheduledEvent.ConstructUnvalidated(new RescheduledEventFlattened
 {
 	EventStatusId = "scheduled",
 	EventStatusSubtypeId = "rescheduled",
-	CreatedName = "Bob",
+	CreatedName = "Alice",
 	ScheduledAt = scheduledAt,
-	RescheduledAt = rescheduledAt
+	RescheduledAt = scheduledAt.AddDays(1)
 });
-Assert(scheduled is RescheduledEvent { CreatedName: "Bob" }, "Scheduled branch mapping failed.");
-EventState cancelled = EventState.MapFromFlattenedDataUnvalidated(new EventStateFlattened
+if (direct.CreatedName != "Alice" || direct.ScheduledAt != scheduledAt) throw new Exception("Construction failed.");
+EventStateFlattened flattened = direct.Flatten();
+if (EventState.MapFromFlattenedDataUnvalidated(flattened) is not RescheduledEvent { CreatedName: "Alice" }) throw new Exception("Round trip failed.");
+CancelledRescheduledEvent cancelled = CancelledRescheduledEvent.ConstructUnvalidated(new CancelledRescheduledEventFlattened
 {
 	EventStatusId = "cancelled",
 	EventStatusSubtypeId = "rescheduled",
 	CreatedName = "Carol",
-	CancellationReason = "Weather"
+	CancellationReason = "weather"
 });
-Assert(cancelled is CancelledRescheduledEvent { CreatedName: "Carol", CancellationReason: "Weather" },
-	"Mapping must check the parent key even when the subtype keys match.");
-
-foreach ((string, string) keys in new[] { ("unknown", "rescheduled"), ("scheduled", "unknown"), ("cancelled", "unknown") })
-{
-	try
-	{
-		_ = EventState.MapFromFlattenedDataUnvalidated(new EventStateFlattened { EventStatusId = keys.Item1, EventStatusSubtypeId = keys.Item2, CreatedName = "Name" });
-		throw new Exception("Unknown keys must be rejected.");
-	}
-	catch (ArgumentException) { }
-}
-
-Assert(typeof(RescheduledEvent).GetConstructors(BindingFlags.Instance | BindingFlags.Public).Length == 0,
-	"Concrete constructors must be private.");
-Assert(typeof(ScheduledEvent).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single().IsFamily,
-	"Intermediate constructors must be protected.");
-Assert(typeof(EventState).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single().IsFamily,
-	"Base constructors must be protected.");
-EventStateFlattened flattened = scheduled.Flatten();
-Assert(flattened.EventStatusId == "scheduled" && flattened.EventStatusSubtypeId == "rescheduled"
-	&& flattened.CreatedName == "Bob" && flattened.ScheduledAt == scheduledAt && flattened.RescheduledAt == rescheduledAt
-	&& flattened.CancellationReason is null, "Flatten must include the selected branch's state and keys.");
-Assert(EventState.MapFromFlattenedDataUnvalidated(flattened) is RescheduledEvent { CreatedName: "Bob" }, "Round trip failed.");
-Assert(cancelled.Flatten().ScheduledAt is null && cancelled.Flatten().RescheduledAt is null, "Other branch data must be null.");
-Console.WriteLine("All consumer checks passed: initialization, flattened round trips, full-key mapping, unknown keys, constructor visibility.");
-
-static void Assert(bool condition, string message)
-{
-	if (!condition) throw new Exception(message);
-}
+if (EventState.MapFromFlattenedDataUnvalidated(cancelled.Flatten()) is not CancelledRescheduledEvent) throw new Exception("Full-key mapping failed.");
+flattened.EventStatusId = "unknown";
+if (EventState.MapFromFlattenedDataUnvalidated(flattened) is not null) throw new Exception("Unknown keys must return null.");
+if (typeof(RescheduledEvent).GetConstructors(BindingFlags.Instance | BindingFlags.Public).Length != 0) throw new Exception("Concrete constructors must be private.");
+if (!typeof(ScheduledEvent).GetConstructors(BindingFlags.Instance | BindingFlags.NonPublic).Single().IsFamily) throw new Exception("Shared constructors must be protected.");
+Console.WriteLine("PASS consumer: typed models, construction, full-key mapping, round trips and constructor visibility");

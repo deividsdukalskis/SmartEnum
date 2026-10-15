@@ -32,6 +32,21 @@ async Task Check(string name, string source, string? expectedDiagnostic = null, 
 	{
 		Diagnostic[] errors = [.. output.GetDiagnostics().Concat(diagnostics).Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
 		if (errors.Length != 0) throw new Exception(name + ": " + string.Join("\n", errors.AsEnumerable()));
+		foreach (SyntaxTree tree in output.SyntaxTrees.Where(tree => tree.FilePath.EndsWith(".SmartEnum.g.cs", StringComparison.Ordinal)))
+		{
+			SemanticModel model = output.GetSemanticModel(tree);
+			foreach (Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax method in tree.GetRoot().DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>())
+			{
+				IMethodSymbol symbol = (IMethodSymbol)model.GetDeclaredSymbol(method)!;
+				if (symbol.DeclaredAccessibility != Accessibility.Public) continue;
+				foreach (IParameterSymbol parameter in symbol.Parameters.Where(parameter => parameter.Name.StartsWith("map", StringComparison.Ordinal)))
+				{
+					string xml = symbol.GetDocumentationCommentXml() ?? "";
+					if (!xml.Contains("name=\"" + parameter.Name + "\"", StringComparison.Ordinal)) throw new Exception(name + ": missing parameter documentation for " + symbol + "." + parameter.Name);
+				}
+			}
+		}
+
 		using MemoryStream assemblyBytes = new();
 		Microsoft.CodeAnalysis.Emit.EmitResult emit = output.Emit(assemblyBytes);
 		if (!emit.Success) throw new Exception(name + ": emit failed: " + string.Join("\n", emit.Diagnostics));
@@ -73,106 +88,7 @@ async Task Check(string name, string source, string? expectedDiagnostic = null, 
 	Console.WriteLine("PASS " + name);
 }
 
-const string simple = """
-using SmartEnum;
-[SmartEnum<int>("Id")] public abstract partial class Root { public string Name { get; } }
-public partial class Leaf : Root { public const int Id = 1; public int Number { get; private set; } }
-""";
-await Check("single key, global namespace, get-only and private setters", simple, generatedTypes: 3);
-await Check("partial declarations are deduplicated", simple + "\npublic partial class Leaf { }", generatedTypes: 3);
-await Check("nullable, init, required, escaped identifiers and computed properties", """
-using SmartEnum;
-[SmartEnum<string>("Kind")] public abstract partial class Root { public required string @event { get; init; } }
-public partial class Leaf : Root {
- public const string Kind = "value";
- public string? Optional { get; private set; }
- public string Computed => "computed";
- public static int Static { get; set; }
- public int this[int index] => index;
-}
-""", generatedTypes: 3);
-await Check("nested partial classes", """
-using SmartEnum;
-namespace Example;
-public static partial class Container {
- [SmartEnum<int>("Id")] public abstract partial class Root { }
- public partial class Leaf : Root { public const int Id = 1; }
-}
-""", generatedTypes: 3);
-await Check("non-SmartEnum ancestor does not consume a key level", """
-using SmartEnum;
-public abstract class Entity { protected Entity() { } }
-[SmartEnum<int>("Id")] public abstract partial class Root : Entity { }
-public partial class Leaf : Root { public const int Id = 1; }
-""", generatedTypes: 3);
-await Check("three key levels", """
-using SmartEnum;
-[SmartEnum<int>("A")][SmartEnum<string>("B")][SmartEnum<char>("C")]
-public abstract partial class Root { }
-public abstract partial class Middle : Root { public const int A = 1; }
-public abstract partial class Middle2 : Middle { public const string B = "two"; }
-public partial class Leaf : Middle2 { public const char C = '3'; }
-""", generatedTypes: 5);
-await Check("no hierarchy", "public class Ordinary { }", generatedTypes: 0);
-await Check("non-abstract root", simple.Replace("abstract partial class Root", "partial class Root"), "SMARTENUM001");
-await Check("non-partial leaf", simple.Replace("partial class Leaf", "class Leaf"), "SMARTENUM002");
-await Check("null key name", simple.Replace("\"Id\"", "null"), "SMARTENUM003");
-await Check("empty key name", simple.Replace("\"Id\"", "\"\""), "SMARTENUM003");
-await Check("invalid key name", simple.Replace("\"Id\"", "\"bad name\""), "SMARTENUM003");
-await Check("missing key", simple.Replace("public const int Id = 1;", ""), "SMARTENUM004");
-await Check("private key", simple.Replace("public const int Id", "private const int Id"), "SMARTENUM005");
-await Check("nonconstant key", simple.Replace("public const int Id", "public static int Id"), "SMARTENUM006");
-await Check("wrong key type", simple.Replace("const int Id", "const long Id"), "SMARTENUM007");
-await Check("attributes repeated down hierarchy", simple.Replace("public partial class Leaf", "[SmartEnum<int>(\"Other\")] public partial class Leaf"), "SMARTENUM008");
-await Check("duplicate key names", simple.Replace("[SmartEnum<int>(\"Id\")]", "[SmartEnum<int>(\"Id\")][SmartEnum<int>(\"Id\")]"), "SMARTENUM009");
-await Check("abstract leaf", simple.Replace("public partial class Leaf", "public abstract partial class Leaf"), "SMARTENUM010");
-await Check("duplicate ancestor property", simple.Replace("public int Number", "public string Name"), "SMARTENUM011");
-await Check("duplicate sibling property", simple + "\npublic partial class Other : Root { public const int Id = 2; public int Number { get; set; } }", "SMARTENUM011");
-await Check("generic root", """
-using SmartEnum;
-[SmartEnum<int>("Id")] public abstract partial class Root<T> { }
-public partial class Leaf<T> : Root<T> { public const int Id = 1; }
-""", generatedTypes: 3);
-await Check("existing constructor conflict", simple.Replace("public const int Id", "public Leaf(string Name, int Number) : base(Name) { this.Number = Number; } public const int Id"), "SMARTENUM012");
-await Check("ambiguous full keys", simple + "\npublic partial class Other : Root { public const int Id = 1; }", "SMARTENUM013");
-await Check("too many inheritance levels", simple + "\npublic partial class TooDeep : Leaf { }", "SMARTENUM014");
-await Check("static root", "using SmartEnum; [SmartEnum<int>(\"Id\")] public static partial class Root { }", "SMARTENUM001");
-await Check("non-partial enclosing class", """
-using SmartEnum;
-public class Container {
- [SmartEnum<int>("Id")] public abstract partial class Root { }
- public partial class Leaf : Root { public const int Id = 1; }
-}
-""", "SMARTENUM012");
-await Check("enum keys and null constant string keys", """
-using SmartEnum;
-public enum Code { One }
-[SmartEnum<Code>("A")][SmartEnum<string>("B")] public abstract partial class Root { }
-public abstract partial class Middle : Root { public const Code A = Code.One; }
-public partial class Leaf : Middle { public const string B = null!; }
-""", generatedTypes: 4);
-await Check("same class name in separate namespaces", """
-using SmartEnum;
-namespace One { [SmartEnum<int>("Id")] public abstract partial class Root { }
-public partial class Leaf : Root { public const int Id = 1; } }
-namespace Two { [SmartEnum<int>("Id")] public abstract partial class Root { }
-public partial class Leaf : Root { public const int Id = 2; } }
-""", generatedTypes: 6);
-foreach (RegressionCase test in RegressionCases.All.Concat(EdgeCases.All).Concat(PrivateFieldCases.All).Concat(FlattenedCases.All).Concat(TransferSafetyCases.All).Concat(FlattenedNamingCases.All).Concat(SeparateCases.All).Concat(CompositeCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
-System.Globalization.CultureInfo originalCulture = System.Globalization.CultureInfo.CurrentCulture;
-try
-{
-	System.Globalization.CultureInfo.CurrentCulture = new("tr-TR");
-	await Check("flattened naming uses invariant casing", """
-		using SmartEnum;
-		[SmartEnum<int>("id")] public abstract partial class Root { private string _item_name; }
-		public partial class Leaf : Root { public const int id = 1; }
-		public static class RegressionProbe { public static void Verify() {
-		 if (Leaf.ConstructUnvalidated("item").Flatten().ItemName != "item") throw new System.Exception();
-		} }
-		""");
-}
-finally { System.Globalization.CultureInfo.CurrentCulture = originalCulture; }
-
+foreach (RegressionCase test in SeparateCases.All.Concat(CompositeCases.All).Concat(CurrentContractCases.All).Concat(ReusableParentCases.All).Concat(ExternalBaseCases.All)) await Check(test.Name, test.Source, test.Diagnostic);
 await LifecycleChecks.RunAsync(references);
-Console.WriteLine($"All {passed} generator/analyzer regression cases and lifecycle checks passed.");
+await DiagnosticChecks.RunAsync(references);
+Console.WriteLine($"All {passed} current-contract generator/analyzer regression cases and lifecycle checks passed.");

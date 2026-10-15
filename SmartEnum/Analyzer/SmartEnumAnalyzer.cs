@@ -1,63 +1,36 @@
-﻿namespace SmartEnum.Analyzer;
+namespace SmartEnum.Analyzer;
 
-using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
-using System.Threading;
+using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
-using SmartEnum.Shared;
+using SmartEnum.Generators;
 
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed partial class SmartEnumAnalyzer : DiagnosticAnalyzer
 {
 	public override void Initialize(AnalysisContext context)
 	{
-		context.ConfigureGeneratedCodeAnalysis(
-			GeneratedCodeAnalysisFlags.None);
-
+		context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
 		context.EnableConcurrentExecution();
-		context.RegisterCompilationStartAction(compilationContext =>
+		context.RegisterCompilationAction(context =>
 		{
-			INamedTypeSymbol? attributeDefinition =
-				compilationContext.Compilation.GetTypeByMetadataName(
-					"SmartEnum.SmartEnumAttribute`1");
-
-			// The project being analyzed does not reference the attribute.
-			if (attributeDefinition is null)
+			// Validate user declarations, not members emitted into their partial classes.
+			Compilation source = context.Compilation.RemoveSyntaxTrees(context.Compilation.SyntaxTrees
+				.Where(tree => tree.FilePath.EndsWith(".SmartEnum.g.cs", System.StringComparison.Ordinal)).ToArray());
+			ImmutableArray<INamedTypeSymbol> types = source.SyntaxTrees.SelectMany(tree =>
 			{
-				return;
-			}
-
-			Lazy<ImmutableArray<DuplicatePropertyData>> duplicateProperties = new(() => DuplicatePropertyData.Collect(compilationContext.Compilation, attributeDefinition), LazyThreadSafetyMode.ExecutionAndPublication);
-
-			compilationContext.RegisterSymbolAction((context) =>
-			{
-				INamedTypeSymbol type = (INamedTypeSymbol)context.Symbol;
-				if (StrategyContract.IsExplicit(type)) return;
-				Result<HierarchyData, HierarchyError> hierarchyData = HierarchyData.Collect(type, attributeDefinition);
-				Result<ValidatedHierarchyData, ImmutableArray<HierarchyError>> validationResult = ValidatedHierarchyData.Validate(hierarchyData, duplicateProperties);
-				if (validationResult is Failure<ValidatedHierarchyData, ImmutableArray<HierarchyError>> failure)
-				{
-					foreach (HierarchyError error in failure.Error)
-					{
-						if (error is HierarchyError.RelevantAttributeNotFound depth)
-							context.ReportDiagnostic(Diagnostic.Create(InvalidHierarchyDepth, depth.Type.Locations[0], depth.Type.Name));
-						this.AnalyzeDuplicateAttributes(error, context);
-						this.AnalyzeDuplicateKeyNames(error, context);
-						this.AnalyzeDuplicateProperties(error, context);
-						this.AnalyzeAbstractClass(error, context);
-						this.AnalyzeNonAbstractClass(error, context);
-						this.AnalyzePartialClass(error, context);
-						this.AnalyzeKeyName(error, context);
-						this.AnalyzeKeyDefinitionExists(error, context);
-						this.AnalyzeKeyDefinitionPublic(error, context);
-						this.AnalyzeKeyIsConst(error, context);
-						this.AnalyzeKeyFieldType(error, context);
-					}
-				}
-			},
-			SymbolKind.NamedType);
+				context.CancellationToken.ThrowIfCancellationRequested();
+				// A new compilation is required to exclude generated partial members.
+#pragma warning disable RS1030
+				SemanticModel model = source.GetSemanticModel(tree);
+#pragma warning restore RS1030
+				return tree.GetRoot(context.CancellationToken).DescendantNodes().OfType<TypeDeclarationSyntax>()
+					.Where(node => node is ClassDeclarationSyntax or RecordDeclarationSyntax)
+					.Select(node => model.GetDeclaredSymbol(node, context.CancellationToken)).OfType<INamedTypeSymbol>();
+			}).ToImmutableArray();
+			SmartEnumGenerator.Generate(new GenerationContext(context.CancellationToken, (_, _) => { }, context.ReportDiagnostic), source, types);
 		});
 	}
 }

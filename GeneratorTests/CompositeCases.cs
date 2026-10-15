@@ -18,7 +18,7 @@ internal static class CompositeCases
 			using SmartEnum;
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { }
 			public partial class Leaf : Root { public const int Kind = 1; [SmartEnumPrivateAccessor] public int Count => 1; }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM028"),
 			new("internal flat model and required members", """
 			using SmartEnum;
 			internal class Payload { }
@@ -42,13 +42,13 @@ internal static class CompositeCases
 			new("malformed parent attribute does not crash", """
 			using SmartEnum;
 			[SmartEnumParent] public sealed partial class Owner { }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM020"),
 			new("repeated owner hierarchy diagnosed", """
 			using SmartEnum;
 			[SmartEnumParent(FlatteningStrategy.Flat)] public sealed partial class Owner { public Root First { get; } public Root Second { get; } }
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { }
 			public partial class Leaf : Root { public const int Kind = 1; }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM046"),
 			new("separate parent arrays retain shape and nullable direct references", """
 			using SmartEnum;
 			using System.Linq;
@@ -59,10 +59,10 @@ internal static class CompositeCases
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Other { }
 			public sealed partial class OtherLeaf : Other { public const int Kind = 1; }
 			public static class RegressionProbe { public static void Verify() {
-			 var owner = Owner.ConstructUnvalidated(new OwnerFlattened { Id = 9, Items = new RootFlattened[] { new LeafFlattened { Kind = 1, Count = 4 } } }, items => items.Select(item => Root.MapFromFlattenedDataUnvalidated(item)!).ToArray());
+			 var owner = Owner.ConstructUnvalidated(new OwnerFlattened { Id = 9, Items = new RootFlattened[] { new LeafFlattened { Kind = 1, Count = 4 } } }, items => items.Select(item => Root.ConstructUnvalidated(item)!).ToArray());
 			 var result = owner.Flatten(args => args.Items.Select(item => item.Flatten(args.OwnerId)).ToArray());
 			 if (result.Items[0] is not LeafFlattened { Count: 4, OwnerId: 9 }) throw new System.Exception();
-			 var optional = OptionalOwner.ConstructUnvalidated(new OptionalOwnerFlattened(), () => null);
+			 var optional = OptionalOwner.ConstructUnvalidated(new OptionalOwnerFlattened());
 			 if (optional.Flatten().Value is not null) throw new System.Exception();
 			} }
 			"""),
@@ -79,24 +79,23 @@ internal static class CompositeCases
 			 if (flat.FirstValue != "a" || flat.SecondLeaf?.SecondValue != 7 || flat.FirstKind != 1 || flat.SecondKind != 2) throw new System.Exception();
 			} }
 			"""),
-			new("parent can reference a concrete variant and recover from unknown keys", """
+			new("direct concrete property maps automatically and delegates unknown keys", """
 			using SmartEnum;
 			[SmartEnumParent(FlatteningStrategy.Flat)] public sealed partial class Owner { public Leaf Value { get; } }
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { }
 			public sealed partial class Leaf : Root { public const int Kind = 1; public int Count { get; } }
 			public static class RegressionProbe { public static void Verify() {
-			 int calls = 0;
-			 var fallback = Leaf.ConstructUnvalidated(new OwnerFlattened { Count = 8 });
-			 var owner = Owner.ConstructUnvalidated(new OwnerFlattened { Kind = 99 }, () => { calls++; return fallback; });
-			 if (calls != 1 || owner.Flatten().Count != 8) throw new System.Exception();
-			} }
+			 var owner = Owner.ConstructUnvalidated(new OwnerFlattened { Kind = 1, Count = 8 }, () => throw new System.Exception());
+			 if (owner.Flatten().Count != 8) throw new System.Exception();
+			 int calls = 0; var missing = Owner.ConstructUnvalidated(new OwnerFlattened { Kind = 99 }, () => { calls++; return owner.Value; }); if (calls != 1 || missing.Value != owner.Value) throw new System.Exception();
+			 } }
 			"""),
 			new("composite normalizes private data and discriminator names", """
 			using SmartEnum;
-			[SmartEnum<int>("type_id", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { private readonly int _base_count; public int Read() => _base_count; }
-			public sealed partial class Leaf : Root { public const int type_id = 1; private readonly string _display_name; public string Name() => _display_name; }
+			[SmartEnum<int>("type_id", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { public int base_count { get; } public int Read() => base_count; }
+			public sealed partial class Leaf : Root { public const int type_id = 1; public string display_name { get; } public string Name() => display_name; }
 			public static class RegressionProbe { public static void Verify() {
-			 var leaf = (Leaf)Root.MapFromFlattenedDataUnvalidated(new RootFlattened { TypeId = 1, BaseCount = 4, DisplayName = "ok" })!;
+			 var leaf = (Leaf)Root.ConstructUnvalidated(new RootFlattened { TypeId = 1, BaseCount = 4, DisplayName = "ok" })!;
 			 if (leaf.Read() != 4 || leaf.Name() != "ok" || leaf.Flatten().DisplayName != "ok") throw new System.Exception();
 			} }
 			"""),
@@ -107,9 +106,9 @@ internal static class CompositeCases
 			public sealed partial class Leaf : Root { public const int Kind = 1; public int Number { get; } public string? Text { get; } }
 			public static class RegressionProbe { public static void Verify() {
 			 var dto = JsonSerializer.Deserialize<RootFlattened>(JsonSerializer.Serialize(new RootFlattened { Kind = 1, Leaf = new() { Number = 0, Text = null } }))!;
-			 var leaf = (Leaf)Root.MapFromFlattenedDataUnvalidated(dto, () => throw new System.Exception())!;
+			 var leaf = (Leaf)Root.ConstructUnvalidated(dto, () => throw new System.Exception())!;
 			 if (leaf.Number != 0 || leaf.Text is not null || leaf.Flatten().Leaf?.Number != 0) throw new System.Exception();
-			 try { Root.MapFromFlattenedDataUnvalidated(null!, () => 0); throw new System.Exception(); } catch (System.ArgumentNullException) { }
+			 try { Root.ConstructUnvalidated(null!, () => 0); throw new System.Exception(); } catch (System.ArgumentNullException) { }
 			} }
 			"""),
 			new("flat missing discriminator invokes substitute only on short branch", """
@@ -127,24 +126,24 @@ internal static class CompositeCases
 			new("flat normalized data collision diagnosed", """
 			using SmartEnum;
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { public int FooBar { get; } }
-			public partial class Leaf : Root { public const int Kind = 1; private int _foo_bar; }
-			""", "SMARTENUM015"),
+			public partial class Leaf : Root { public const int Kind = 1; public int foo_bar { get; } }
+			""", "SMARTENUM011"),
 			new("nested foreign key collision diagnosed", """
 			using SmartEnum;
 			[SmartEnumParent(FlatteningStrategy.Nested)] public sealed partial class Owner { [SmartEnumIdentity("OwnerId")] public int Id { get; } public Root Value { get; } }
 			[SmartEnum<int>("Kind", FlatteningStrategy.Nested, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { public int OwnerId { get; } }
 			public partial class Leaf : Root { public const int Kind = 1; }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM042"),
 			new("parent must be sealed", """
 			using SmartEnum;
 			[SmartEnumParent(FlatteningStrategy.Flat)] public partial class Owner { public Root Value { get; } }
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)] public abstract partial class Root { }
 			public partial class Leaf : Root { public const int Kind = 1; }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM017"),
 			new("parent without hierarchy diagnosed", """
 			using SmartEnum;
 			[SmartEnumParent(FlatteningStrategy.Flat)] public sealed partial class Owner { public string Name { get; } }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM047"),
 			new("ambiguous nested sibling keys diagnosed", """
 			using SmartEnum;
 			[SmartEnum<int>("Kind", FlatteningStrategy.Nested, KeyValueOnBranchMissing.FirstBranch)]
@@ -152,7 +151,7 @@ internal static class CompositeCases
 			public abstract partial class Branch : Root { public const int Kind = 1; }
 			public partial class A : Branch { public const int Detail = 2; }
 			public partial class B : Branch { public const int Detail = 2; }
-			""", "SMARTENUM015"),
+			""", "SMARTENUM013"),
 			new("flat preserves unused values and calls required fallbacks only when absent", """
 			using SmartEnum;
 			[SmartEnum<int>("Kind", FlatteningStrategy.Flat, KeyValueOnBranchMissing.FirstBranch)]
@@ -161,11 +160,11 @@ internal static class CompositeCases
 			public sealed partial class B : Root { public const int Kind = 2; [SmartEnumNullableProperty] public int Count { get; } }
 			public static class RegressionProbe { public static void Verify() {
 			 var original = new RootFlattened { Id = 4, Kind = 2, Name = "retained", Count = null };
-			 var b = (B)Root.MapFromFlattenedDataUnvalidated(original, () => 7)!;
+			 var b = (B)Root.ConstructUnvalidated(original, () => 7)!;
 			 var result = b.Flatten(() => throw new System.Exception());
 			 if (result.Name != "retained" || result.Count != 7 || result.Id != 4) throw new System.Exception();
 			 result.Kind = 1;
-			 var a = (A)Root.MapFromFlattenedDataUnvalidated(result, () => throw new System.Exception())!;
+			 var a = (A)Root.ConstructUnvalidated(result, () => throw new System.Exception())!;
 			 if (a.Flatten(() => "unused").Count != 7) throw new System.Exception();
 			 var fresh = B.ConstructUnvalidated(new RootFlattened { Count = 3 }, () => 9);
 			 if (fresh.Flatten(() => "fallback").Name != "fallback") throw new System.Exception();
@@ -179,11 +178,11 @@ internal static class CompositeCases
 			public sealed partial class B : Root { public const int Kind = 2; public string Name { get; } }
 			public static class RegressionProbe { public static void Verify() {
 			 var input = new RootFlattened { Kind = 1, B = new() { Name = "keep" } };
-			 var a = Root.MapFromFlattenedDataUnvalidated(input, () => 12, () => "unused")!;
+			 var a = Root.ConstructUnvalidated(input, () => 12, () => "unused")!;
 			 var result = a.Flatten();
 			 if (result.A?.Number != 12 || result.B?.Name != "keep") throw new System.Exception();
 			 result.Kind = 99;
-			 if (Root.MapFromFlattenedDataUnvalidated(result, () => 0, () => "") is not null) throw new System.Exception();
+			 if (Root.ConstructUnvalidated(result, () => 0, () => "") is not null) throw new System.Exception();
 			} }
 			"""),
 			new("flat owner mixed hierarchy and generated foreign keys", """
@@ -238,7 +237,7 @@ internal static class CompositeCases
 			public sealed partial class Ready : Status { public const int Kind = 1; [SmartEnumNullableProperty] public int Count { get; } }
 			public static class RegressionProbe { public static void Verify() {
 			 var dto = new MeetingFlattened { Id = "m", Statuses = new() { new() { Kind = 1 } } };
-			 var meeting = Meeting.ConstructUnvalidated(dto, () => 6, args => args.Flattened.Select(item => Status.MapFromFlattenedDataUnvalidated(item, args.MapCount)!).ToList());
+			 var meeting = Meeting.ConstructUnvalidated(dto, () => 6, args => args.Flattened.Select(item => Status.ConstructUnvalidated(item, args.MapCount)!).ToList());
 			 var flat = meeting.Flatten(args => args.Statuses.Select(item => item.Flatten(args.MeetingId)).ToList());
 			 if (flat.Statuses[0].Count != 6 || flat.Statuses[0].MeetingId != "m") throw new System.Exception();
 			} }

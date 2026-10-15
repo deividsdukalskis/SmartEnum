@@ -4,11 +4,11 @@
 
 All attributes are generated in the `SmartEnum` namespace. Add `using SmartEnum;` to your source file.
 
-**API modes:** the three-argument `SmartEnum<TKey>` constructor selects Flat, Nested or Separate. The one-argument constructor selects the [legacy API](legacy-api.md).
+`SmartEnum<TKey>` takes three arguments. The former one-argument API has been removed.
 
 ## SmartEnum<TKey>
 
-**Apply to:** an abstract partial hierarchy root. Flat/Nested hierarchies can also start a new discriminator group on an intermediate abstract class.
+**Apply to:** an abstract partial hierarchy root. Every strategy supports starting a new hierarchy on an intermediate abstract class. It receives its own mapper and flattened model while remaining reachable through the outer mapper.
 
 **Purpose:** defines how a discriminator identifies a branch and how that level's data is flattened.
 
@@ -47,7 +47,7 @@ Apply one attribute per discriminator level, in hierarchy order. Keep a group's 
 | `SetNull` | Makes the discriminator nullable and writes `null` when that level is absent. |
 | `PromptSubstitute` | Adds a `Func<TKey> mapKeyName` parameter to `Flatten`; calls it when that level is absent. |
 
-The shorter form, `[SmartEnum<int>("Kind")]`, uses the legacy API and its different mapping/nullability rules.
+A subclass group restarts discriminator levels. See [subclass hierarchies](flat-nested-parents.md#subclass-hierarchies) for its generated methods.
 
 ## SmartEnumParent
 
@@ -99,11 +99,11 @@ private readonly List<string> _attendees = new();
 public IReadOnlyList<string> Attendees => _attendees.AsReadOnly();
 ```
 
-The model gets `List<string> Attendees`: the property's name and the field's type. The backing field is not added a second time.
+The model gets `List<string> Attendees`: the property's name and the field's type. The backing field is not added a second time. Other private fields are excluded automatically.
 
 ## SmartEnumNullableProperty
 
-**Apply to:** a property using the three-argument API, including parent properties. Supported with every strategy.
+**Apply to:** a property, including parent properties. Supported with every strategy.
 
 **Purpose:** makes the flattened property nullable while keeping the domain property's original type.
 
@@ -116,36 +116,13 @@ The model gets `DateTime? CancelledAt`. Reconstruction accepts `Func<DateTime> m
 
 ## SmartEnumIgnore
 
-**Apply to:** a field or property. Supported by both APIs.
+**Apply to:** a public field or a property.
 
 **Purpose:** excludes state from generated construction and flattening.
 
 ```csharp
 [SmartEnumIgnore]
-private string? _cachedDescription;
+public string? CachedDescription { get; set; }
 ```
 
 Initialize ignored state yourself. Required members cannot be ignored.
-
-## SmartEnumSnapshot — legacy only
-
-**Apply to:** a computed property in the one-argument API.
-
-**Purpose:** copies its current value into the flattened model for information only. Reconstruction ignores the supplied snapshot and recomputes the property from domain state.
-
-```csharp
-[SmartEnumSnapshot]
-public string DisplayName => $"{FirstName} {LastName}";
-```
-
-## SmartEnumParentData — legacy only
-
-**Apply to:** the root class in the one-argument API.
-
-**Purpose:** connects an external base-constructor parameter to a readable field or property when their names differ.
-
-```csharp
-[SmartEnumParentData("identifier", "StoredIdentifier")]
-```
-
-`identifier` names the constructor parameter; `StoredIdentifier` names the readable member. Names are case-sensitive and the types must match. This attribute concerns an inherited base constructor; `SmartEnumParent` concerns a class that contains SmartEnum values.

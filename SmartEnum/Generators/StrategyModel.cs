@@ -12,12 +12,14 @@ public sealed partial class SmartEnumGenerator
 	{
 		public ISymbol Property { get; }
 		public ISymbol Storage { get; }
+		public INamedTypeSymbol Owner { get; }
+		public bool Inherited => !SameDefinition(this.Owner, this.Property.ContainingType);
 		public ITypeSymbol Type => this.Storage is IFieldSymbol field ? field.Type : ((IPropertySymbol)this.Property).Type;
 		public string Name => FlattenedName(this.Property.Name);
 		public bool Nullable => HasDataAttribute(this.Property, "SmartEnumNullablePropertyAttribute") || this.Type.NullableAnnotation == NullableAnnotation.Annotated || IsNullableValue(this.Type);
 		public bool NeedsFallback => this.Nullable && this.Type.NullableAnnotation != NullableAnnotation.Annotated && !IsNullableValue(this.Type);
 		public string Parameter => "map" + this.Name;
-		public TransferMember(ISymbol property, ISymbol storage) => (this.Property, this.Storage) = (property, storage);
+		public TransferMember(ISymbol property, ISymbol storage, INamedTypeSymbol? owner = null) => (this.Property, this.Storage, this.Owner) = (property, storage, owner ?? property.ContainingType);
 	}
 
 	private static TransferMember[] StrategyData(INamedTypeSymbol type)
@@ -32,10 +34,11 @@ public sealed partial class SmartEnumGenerator
 				? type.GetMembers(name).OfType<IFieldSymbol>().FirstOrDefault() ?? (ISymbol)property : property;
 			return new TransferMember(property, storage);
 		}).ToArray();
-		IEnumerable<TransferMember> fields = type.GetMembers().OfType<IFieldSymbol>().Where(field => !field.IsStatic && !field.IsConst && !field.IsImplicitlyDeclared
-			&& field.DeclaredAccessibility is Accessibility.Public or Accessibility.Private && !HasDataAttribute(field, "SmartEnumIgnoreAttribute")
-			&& !properties.Any(member => SymbolEqualityComparer.Default.Equals(member.Storage, field))).Select(field => new TransferMember(field, field));
-		return properties.Concat(fields).OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
+		IEnumerable<TransferMember> fields = type.GetMembers().OfType<IFieldSymbol>()
+			.Where(field => field.DeclaredAccessibility == Accessibility.Public && !field.IsStatic && !field.IsConst && !field.IsImplicitlyDeclared
+				&& !HasDataAttribute(field, "SmartEnumIgnoreAttribute") && !properties.Any(member => SymbolEqualityComparer.Default.Equals(member.Storage, field)))
+			.Select(field => new TransferMember(field, field));
+		return properties.Concat(fields).Concat(ExternalBaseData(type)).OrderBy(member => member.Name, StringComparer.Ordinal).ToArray();
 	}
 
 	private static TransferMember[] StrategyData(INamedTypeSymbol type, INamedTypeSymbol root) => GetPath(type, root).SelectMany(StrategyData).ToArray();
@@ -61,8 +64,8 @@ public sealed partial class SmartEnumGenerator
 		string parameters = concrete ? FlattenedTypeName(type) + " flattened" + string.Concat(data.Where(member => member.NeedsFallback).Select(member => ", " + StrategyFallback(member)))
 			: string.Join(", ", data.Select(member => TypeName(member.Type) + " " + Identifier(member.Name)));
 		string argument(TransferMember member) => concrete ? StrategyValue(member) : Identifier(member.Name);
-		string parent = SameDefinition(type, root) ? string.Empty : " : base(" + string.Join(", ", StrategyData(type.BaseType!, root).Select(argument)) + ")";
-		IEnumerable<string> assignments = own.OrderBy(member => member.Storage is IFieldSymbol).Select(member => $"this.{Identifier(member.Storage.Name)} = {argument(member)};");
+		string parent = SameDefinition(type, root) ? ExternalBaseInitializer(type, argument) : " : base(" + string.Join(", ", StrategyData(type.BaseType!, root).Select(argument)) + ")";
+		IEnumerable<string> assignments = TransferAssignments(type, own, argument);
 		string required = data.Any(member => member.Property is IPropertySymbol { IsRequired: true } || member.Storage is IFieldSymbol { IsRequired: true })
 			? "[global::System.Diagnostics.CodeAnalysis.SetsRequiredMembers]" : string.Empty;
 		return $$"""

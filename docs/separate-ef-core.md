@@ -44,7 +44,7 @@ Ready ready = Ready.ConstructUnvalidated(new ReadyFlattened
 ReadyFlattened concrete = ready.Flatten();
 Status domain = ready;
 StatusFlattened data = domain.Flatten();
-Status? restored = Status.MapFromFlattenedDataUnvalidated(data);
+Status? restored = Status.ConstructUnvalidated(data);
 ```
 
 The mapper returns null when the concrete model type and discriminator values do not identify the same variant. Unvalidated methods bypass domain validation. Reference values are copied shallowly.
@@ -80,8 +80,8 @@ The generator has no EF runtime dependency and does not configure persistence au
 
 ## Limitations
 
-- Select Separate at every discriminator level and declare the levels on the root.
-- Standalone Separate supports namespace-level ordinary partial classes and compatible generic hierarchies.
-- Records, enclosing type declarations, external root base classes and restarted discriminator groups are unsupported in Separate.
+- Select Separate at every discriminator level. Abstract subclasses may start new groups; each receives an abstract flattened base and its own mapper.
+- Standalone Separate supports partial classes, non-positional records, compatible generic hierarchies and types nested in partial declarations.
+- Primary/positional constructors on generated domain declarations remain unsupported. Ordinary base classes are supported when their inherited properties can be restored; see [base classes](flat-nested-parents.md#ordinary-base-classes).
 - Parent mapping has the additional [composite limitations](flat-nested-parents.md#limitations).
 - Generated method names and flattened-data constructor signatures must remain available. Compatible protected data constructors on shared classes can be reused.

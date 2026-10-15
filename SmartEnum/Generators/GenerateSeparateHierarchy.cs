@@ -9,10 +9,10 @@ using SmartEnum.Shared;
 
 public sealed partial class SmartEnumGenerator
 {
-	private static readonly DiagnosticDescriptor StrategyError = new("SMARTENUM015", "Invalid flattening contract", "{0}", "SmartEnum", DiagnosticSeverity.Error, true);
-	private static readonly DiagnosticDescriptor IdentityWarning = new("SMARTENUM016", "Ambiguous foreign key name", "Foreign key name '{0}' may conflict with another flattened identity; specify a descriptive foreignKeyName", "SmartEnum", DiagnosticSeverity.Warning, true);
+	internal static readonly DiagnosticDescriptor StrategyError = new("SMARTENUM015", "Invalid SmartEnum attribute arguments", "{0}", "SmartEnum", DiagnosticSeverity.Error, true);
+	internal static readonly DiagnosticDescriptor IdentityWarning = new("SMARTENUM016", "Ambiguous foreign key name", "Foreign key name '{0}' may conflict with another flattened identity; specify a descriptive foreignKeyName", "SmartEnum", DiagnosticSeverity.Warning, true);
 
-	private static void GenerateStrategyHierarchies(SourceProductionContext output, Compilation compilation, ImmutableArray<INamedTypeSymbol> symbols, INamedTypeSymbol attribute)
+	private static void GenerateStrategyHierarchies(GenerationContext output, Compilation compilation, ImmutableArray<INamedTypeSymbol> symbols, INamedTypeSymbol attribute)
 	{
 		INamedTypeSymbol[] all = symbols.Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToArray();
 		HashSet<INamedTypeSymbol> composed = GenerateCompositeHierarchies(output, compilation, all, attribute);
@@ -22,7 +22,7 @@ public sealed partial class SmartEnumGenerator
 			output.CancellationToken.ThrowIfCancellationRequested();
 			if (composed.Contains(root)) continue;
 			INamedTypeSymbol[] members = all.Where(type => GetPath(type, root).Count > 0).OrderBy(type => type.ToDisplayString(), StringComparer.Ordinal).ToArray();
-			if (!ValidateSeparateContract(output, compilation, root, members, attribute)) continue;
+			if (!ValidateCompositeContract(output, compilation, root, members, attribute, false)) continue;
 			AttributeData[] keys = GetAttributes(root, attribute);
 			string keyProperties = string.Join("\n", keys.Select(key => $"public {SeparateKeyType(key)} {FlattenedIdentifier((string)key.ConstructorArguments[0].Value!)} {{ get; set; }} = default!;"));
 			string commonProperties = string.Join("\n", StrategyData(root).Select(SeparateProperty));
@@ -75,7 +75,7 @@ public sealed partial class SmartEnumGenerator
 			/// <summary>Warning: Reconstructs domain data without domain validation. Use only for plain data transfer, such as ORM materialization.</summary>
 			/// <remarks>Returns null when the concrete transfer type and discriminator values do not match a known variant.</remarks>
 			{{string.Join("\n", callbacks.Select(SeparateCallbackDoc))}}
-			public static {{TypeName(root)}}? MapFromFlattenedDataUnvalidated({{parameters}})
+			public static {{TypeName(root)}}? ConstructUnvalidated({{parameters}})
 			{
 				if (flattened is null) throw new global::System.ArgumentNullException(nameof(flattened));
 				{{Indent(string.Join("\n", branches))}}
@@ -110,7 +110,8 @@ public sealed partial class SmartEnumGenerator
 				return new {{TypeName(type)}}(flattened{{string.Concat(callbacks.Select(member => ", " + member.Parameter))}});
 			}
 
-			/// <inheritdoc />
+			/// <summary>Copies this variant into its flattened persistence model.</summary>
+			{{string.Join("\n", SeparateMissingKeyCallbacks(root, members, keys).Select(index => $"/// <param name=\"{SeparateKeyCallback(keys[index])}\">Supplies flattened discriminator {FlattenedName((string)keys[index].ConstructorArguments[0].Value!)} for hierarchy {root.Name}. Called only when this variant has no such discriminator level and PromptSubstitute requires a value.</param>"))}}
 			public override {{FlattenedTypeName(type)}} Flatten({{SeparateFlattenParameters(root, members, keys)}})
 				=> new {{FlattenedTypeName(type)}} { {{string.Join(", ", assignments)}} };
 			""";

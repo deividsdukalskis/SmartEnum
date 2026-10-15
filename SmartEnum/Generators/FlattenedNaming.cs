@@ -13,14 +13,4 @@ public sealed partial class SmartEnumGenerator
 
 	private static string FlattenedIdentifier(string name) => Identifier(FlattenedName(name));
 
-	private static string[] GetFlattenedKeyNames(AttributeData[] keys, DataMember[] data)
-	{
-		HashSet<string> names = new(data.Select(member => FlattenedName(member.Name)), StringComparer.Ordinal);
-		return keys.Select(key =>
-		{
-			string name = FlattenedName((string)key.ConstructorArguments[0].Value!);
-			while (!names.Add(name)) name = "Key" + name;
-			return Identifier(name);
-		}).ToArray();
-	}
 }
